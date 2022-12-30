@@ -7,9 +7,6 @@ package main
 
 #include <stdio.h>
 
-
-///
-
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
@@ -34,8 +31,6 @@ package main
 # define SIOCSHWTSTAMP 0x89b0
 #endif
 
-///
-
 static int64_t get_timestamp(struct msghdr *msg, int32_t timestamp_type)
 {
 	for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg))
@@ -50,39 +45,6 @@ static int64_t get_timestamp(struct msghdr *msg, int32_t timestamp_type)
 			// printf("\n");
 			long u_seconds = (long)stamp[timestamp_type].tv_sec * 1000000 + (long)stamp[timestamp_type].tv_nsec / 1000;
 			return u_seconds & 0x7FFFFFFFFFFFFFFF;
-		}
-
-		continue;
-		if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SO_TIMESTAMPING && timestamp_type == SO_TIMESTAMPING)
-		{
-			struct timespec* stamp = (struct timespec *)CMSG_DATA(cmsg);
-			// printf("SO_TIMESTAMPING ");
-			// printf("SW %ld.%09ld ",             (long)stamp[0].tv_sec, (long)stamp[0].tv_nsec);
-			// printf("HW transformed %ld.%09ld ", (long)stamp[1].tv_sec, (long)stamp[1].tv_nsec);
-			// printf("HW raw %ld.%09ld",          (long)stamp[2].tv_sec, (long)stamp[2].tv_nsec);
-			// printf("\n");
-			long u_seconds = (long)stamp[2].tv_sec * 1000000 + (long)stamp[2].tv_nsec / 1000;
-			return u_seconds & 0x7FFFFFFFFFFFFFFF;
-		}
-		else if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SO_TIMESTAMP && timestamp_type == SO_TIMESTAMP)
-		{
-			struct timeval *stamp = (struct timeval *)CMSG_DATA(cmsg);
-			// printf("SO_TIMESTAMP %ld.%06ld\n", (long)stamp->tv_sec, (long)stamp->tv_usec);
-			long u_seconds = (long)stamp->tv_sec * 1000000 + (long)stamp->tv_usec;
-			return u_seconds & 0x7FFFFFFFFFFFFFFF;
-			// break;
-		}
-		else if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SO_TIMESTAMPNS && timestamp_type == SO_TIMESTAMPNS)
-		{
-			struct timespec *stamp = (struct timespec *)CMSG_DATA(cmsg);
-			// printf("SO_TIMESTAMPNS %ld.%09ld\n", (long)stamp->tv_sec, (long)stamp->tv_nsec);
-			long u_seconds = (long)stamp->tv_sec * 1000000 + (long)stamp->tv_nsec / 1000;
-			return u_seconds & 0x7FFFFFFFFFFFFFFF;
-			// break;
-		}
-		else if (cmsg->cmsg_level == SOL_SOCKET)
-		{
-			// printf("F %ld\n", (long)cmsg->cmsg_type);
 		}
 	}
 	return -1;
@@ -162,13 +124,6 @@ import (
 	"unsafe"
 )
 
-//	func recvpacket_v4(fd int, data []byte, recvmsg_flags int32) (result int, u_seconds int64, addr net.IP) {
-//		var ip uint32 = 0
-//		addr = make(net.IP, 4)
-//		result = (int)(C.recvpacket_v4(C.int32_t(fd), (*C.uint8_t)(unsafe.Pointer(&data[0])), C.uint32_t(len(data)), (*C.uint32_t)(unsafe.Pointer(&ip)), (*C.int64_t)(unsafe.Pointer(&u_seconds)), C.int32_t(recvmsg_flags)))
-//		if result > 0 {
-//			binary.BigEndian.PutUint32(addr, ip)
-//		}
 func recvpacket_v4(fd int, data []byte, recvmsg_flags int32, timestamp_type int) (result int, u_seconds int64) {
 	result = (int)(C.recvpacket_v4(C.int32_t(fd), (*C.uint8_t)(unsafe.Pointer(&data[0])), C.uint32_t(len(data)), (*C.int64_t)(unsafe.Pointer(&u_seconds)), C.int32_t(recvmsg_flags), C.int32_t(timestamp_type)))
 	return

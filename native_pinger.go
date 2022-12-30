@@ -6,7 +6,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -358,38 +357,38 @@ func (this *ICMPNative) error_thread() {
 	}
 }
 
-func socket_set_ioctl(fd int, name string, so_timestamping_flags int) error {
+// func socket_set_ioctl(fd int, name string, so_timestamping_flags int) error {
 
-	if len(name) >= unix.IFNAMSIZ {
-		return fmt.Errorf("interface name too long")
-	}
+// 	if len(name) >= unix.IFNAMSIZ {
+// 		return fmt.Errorf("interface name too long")
+// 	}
 
-	ts := ifreq{
-		ifr_data: hwtstamp_config{},
-	}
+// 	ts := ifreq{
+// 		ifr_data: hwtstamp_config{},
+// 	}
 
-	if so_timestamping_flags&unix.SOF_TIMESTAMPING_TX_HARDWARE > 0 {
-		ts.ifr_data.tx_type = 1
-	}
-	if so_timestamping_flags&unix.SOF_TIMESTAMPING_RX_HARDWARE > 0 {
-		ts.ifr_data.rx_filter = 1
-	}
+// 	if so_timestamping_flags&unix.SOF_TIMESTAMPING_TX_HARDWARE > 0 {
+// 		ts.ifr_data.tx_type = 1
+// 	}
+// 	if so_timestamping_flags&unix.SOF_TIMESTAMPING_RX_HARDWARE > 0 {
+// 		ts.ifr_data.rx_filter = 1
+// 	}
 
-	copy(ts.ifr_name[:], name)
+// 	copy(ts.ifr_name[:], name)
 
-	fmt.Printf("flags: %v, tx_type: %v, rx_filters: %v\n", ts.ifr_data.flags, ts.ifr_data.tx_type, ts.ifr_data.rx_filter)
+// 	fmt.Printf("flags: %v, tx_type: %v, rx_filters: %v\n", ts.ifr_data.flags, ts.ifr_data.tx_type, ts.ifr_data.rx_filter)
 
-	if err := syscall.SetsockoptString(fd, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, name); err != nil {
-		panic(err)
-	}
-	if _, _, err := unix.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(unix.SIOCSHWTSTAMP), uintptr(unsafe.Pointer(&ts))); err < 0 {
-		panic(err)
-		// return err
-	}
-	fmt.Printf("flags: %v, tx_type: %v, rx_filters: %v\n", ts.ifr_data.flags, ts.ifr_data.tx_type, ts.ifr_data.rx_filter)
+// 	if err := syscall.SetsockoptString(fd, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, name); err != nil {
+// 		panic(err)
+// 	}
+// 	if _, _, err := unix.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(unix.SIOCSHWTSTAMP), uintptr(unsafe.Pointer(&ts))); err < 0 {
+// 		panic(err)
+// 		// return err
+// 	}
+// 	fmt.Printf("flags: %v, tx_type: %v, rx_filters: %v\n", ts.ifr_data.flags, ts.ifr_data.tx_type, ts.ifr_data.rx_filter)
 
-	return nil
-}
+// 	return nil
+// }
 
 func socket_set_flags(fd int, so_timestamping_flags int, so_timestamp int, so_timestampns int) error {
 
