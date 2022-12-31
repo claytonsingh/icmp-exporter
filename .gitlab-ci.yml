@@ -1,0 +1,21 @@
+default:
+  image: golang:1.19-buster
+
+variables:
+  GIT_DEPTH: 1
+
+# Define Stages
+stages:
+  - build
+
+build-x64:
+  tags: [docker]
+  stage: build
+  script:
+    - apt update && apt install -y build-essential
+    - mkdir build
+    - go build -o bin/prom-icmp src/*.go
+  artifacts:
+    paths:
+      - bin/prom-icmp
+    expire_in: 1 week
