@@ -24,7 +24,7 @@ build-arm64:
   stage: build
   script:
     - apt update && apt install -y build-essential gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
-    - CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -o bin/prom-icmp-arm64 src/*.go
+    - CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build -o bin/prom-icmp-arm64 src/*.go
   artifacts:
     paths:
       - bin/*
