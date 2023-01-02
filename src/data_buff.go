@@ -21,6 +21,22 @@ func (this *DataBuff[T]) Append(items ...T) {
 	this.elements = append(this.elements, items...)[ndequeue:]
 }
 
+func (this *DataBuff[T]) Insert(index int, item T) []T {
+	ndequeue := len(this.elements) + 1 - this.Size
+	if ndequeue < 0 {
+		ndequeue = 0
+	}
+
+	if index >= len(this.elements) { // nil or empty slice or after last element
+		this.elements = append(this.elements, item)[ndequeue:]
+	} else {
+		temp := append(this.elements[:index+1], this.elements[index:]...) // index < len(a)
+		temp[index] = item
+		this.elements = temp[ndequeue:]
+	}
+	return this.elements
+}
+
 func (this *DataBuff[T]) Snapshot() (items []T) {
 	items = this.elements[:]
 	return
