@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"math"
 	"net"
 	"net/http"
 	"sort"
@@ -93,9 +92,9 @@ func main() {
 	}()
 	go PruneMap()
 
-	if _, new := GetJob(net.IPv4(10, 10, 0, 1)); new {
-		signal.Signal()
-	}
+	// if _, new := GetJob(net.IPv4(10, 10, 0, 1)); new {
+	// 	signal.Signal()
+	// }
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/probe", ProbeHander)
@@ -104,19 +103,11 @@ func main() {
 	select {}
 }
 
-func Max32(a float32, b float32) float32 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 func W(n int, l int) float32 {
-	nf := float64(n)
-	lf := float64(l)
-	p := 1.4
-	return float32(math.Max(1-math.Pow(25, p)/math.Pow(nf, p), 0) * math.Max(1-math.Pow(25, p)/math.Pow(lf-nf, p), 0))
-	//return Max32(1.0-(25*25)/(nf*nf), 0) * Max32(1-(25*25)/((lf-nf)*(lf-nf)), 0)
+	if n < 25 || l-n < 25 {
+		return 0
+	}
+	return 1
 }
 
 func ProbeHander(w http.ResponseWriter, r *http.Request) {
@@ -199,69 +190,60 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var limit int = len(resultsSorted) - 25
-	if len(resultsSorted) < 50 {
-		limit = len(resultsSorted)
-	} else if len(resultsSorted) < 75 {
-		limit = 50
-	}
 	var maxScore float32 = 0.12
-	var maxIndex int = limit
+	var maxIndex int = len(resultsSorted)
 	var sumRTT int64 = 0
 	var sumRTT2 int64 = 0
 	var bestRTT int64 = 0
 	var bestLoss int = 0
 	var lastResult *PingResult
 	for n, r := range resultsSorted {
-		if n == limit {
-			break
-		}
-
-		// r := &results[len(results)-n-1]
-
-		// After and Before avearages
-		aavg := float32(a) / float32(len(results)-n)
-		bavg := float32(b) / float32(n)
-
-		cavg := aavg - bavg
-		if cavg < 0 {
-			cavg = 0 - cavg
-		}
 		w := W(n, len(results))
-		score := cavg * w
+		if w > 0 {
+			// After and Before avearages
+			aavg := float32(a) / float32(len(results)-n)
+			bavg := float32(b) / float32(n)
+			cavg := aavg - bavg
+			if cavg < 0 {
+				cavg = -cavg
+			}
+			score := cavg * w
 
-		if r.Success {
-			sumRTT += r.RountripTime
-			sumRTT2 += r.RountripTime * r.RountripTime
+			if r.Success {
+				sumRTT += r.RountripTime
+				sumRTT2 += r.RountripTime * r.RountripTime
+			}
+
+			// bo := " F"
+			// if r.Success {
+			// 	bo = "T "
+			// }
+
+			// if n < 60 {
+			// 	fmt.Printf("Debug: %6d %-58v %s %6d=%6.2f %6d=%6.2f %6.2f %6.2f %6.2f\n", n, r.Timestamp, bo, a, aavg, b, bavg, cavg, w, score)
+			// }
+			// fmt.Println("Debug:", n, a, aavg, b, bavg, cavg, w, score)
+
+			if score > maxScore {
+				maxScore = score
+				maxIndex = n
+				bestRTT = sumRTT
+				bestLoss = b
+				lastResult = r
+			}
 		}
-
-		// bo := " F"
-		// if r.Success {
-		// 	bo = "T "
-		// }
-
-		// fmt.Printf("Debug: %6d %-58v %s %6d=%6.2f %6d=%6.2f %6.2f %6.2f %6.2f\n", n, r.Timestamp, bo, a, aavg, b, bavg, cavg, w, score)
-		// fmt.Println("Debug:", n, a, aavg, b, bavg, cavg, w, score)
-
-		if score > maxScore {
-			maxScore = score
-			maxIndex = n
-			bestRTT = sumRTT
-			bestLoss = b
-			lastResult = r
-		}
-
 		if r.Success {
 			a -= 1
 			b += 1
 		}
 	}
+	// fmt.Println(maxIndex, len(resultsSorted))
 
-	if maxIndex == limit {
+	if maxIndex == len(resultsSorted) {
 		bestLoss = b
 		bestRTT = sumRTT
 	}
-	if lastResult != nil {
+	if lastResult != nil && maxIndex >= 100 {
 		job.Mutex.Lock()
 		for n := range job.Results.Snapshot() {
 			if &results[len(results)-n-1] == lastResult {
