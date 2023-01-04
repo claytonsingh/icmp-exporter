@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/abursavich/nett"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -60,6 +61,7 @@ type PingResult struct {
 
 var jobMap = sync.Map{}
 var signal = NewSignal()
+var resolver = nett.CacheResolver{TTL: 5 * time.Minute}
 
 func main() {
 
@@ -113,9 +115,46 @@ func W(n int, l int) float32 {
 func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 
-	requestIp := net.ParseIP(params.Get("ip"))
-	if requestIp == nil {
+	var target string = ""
+
+	if params.Has("target") {
+		target = params.Get("target")
+	} else if params.Has("ip") {
+		target = params.Get("ip")
+	}
+
+	if target == "" {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(([]byte)("# 400 - missing parameter target"))
 		return
+	}
+
+	requestTarget := target
+	requestIp := net.ParseIP(target)
+	if requestIp == nil {
+		addresses, err := resolver.Resolve(target)
+		if err != nil {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(([]byte)("# 400 - unable to resolve target=\"" + target + "\""))
+			return
+		}
+		sort.Slice(addresses, func(i int, j int) bool {
+			return bytes.Compare(addresses[i], addresses[j]) < 0
+		})
+		for _, address := range addresses {
+			if address.IsGlobalUnicast() && bytes.HasPrefix(address.To16(), []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF}) {
+				requestIp = address
+				break
+			}
+		}
+		if requestIp == nil {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(([]byte)("# 400 - unable to resolve target=\"" + target + "\""))
+			return
+		}
 	}
 
 	registry := prometheus.NewRegistry()
@@ -123,37 +162,37 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	probeSentCount := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "probe_sent_count",
 		Help: "How many icmp packets were sent to the target ip",
-	}, []string{"ip"})
+	}, []string{"ip", "target"})
 	registry.MustRegister(probeSentCount)
 
 	probeRecvCount := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "probe_recv_count",
 		Help: "How many icmp packets were recieved from the target ip",
-	}, []string{"ip"})
+	}, []string{"ip", "target"})
 	registry.MustRegister(probeRecvCount)
 
 	probeLatencyTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "probe_latency_seconds_total",
 		Help: "",
-	}, []string{"ip"})
+	}, []string{"ip", "target"})
 	registry.MustRegister(probeLatencyTotal)
 
 	probeLatency := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "probe_latency_seconds",
 		Help: "",
-	}, []string{"ip"})
+	}, []string{"ip", "target"})
 	registry.MustRegister(probeLatency)
 
 	probeLoss := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "probe_loss_ratio",
 		Help: "",
-	}, []string{"ip"})
+	}, []string{"ip", "target"})
 	registry.MustRegister(probeLoss)
 
 	probeSamples := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "probe_samples_count",
 		Help: "",
-	}, []string{"ip"})
+	}, []string{"ip", "target"})
 	registry.MustRegister(probeSamples)
 
 	job, new := GetJob(requestIp)
@@ -161,11 +200,13 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 		signal.Signal()
 	}
 
+	labels := []string{job.IPAddress.String(), requestTarget}
+
 	resultsSorted := make([]*PingResult, 0, job.Results.Size)
 	job.Mutex.Lock()
-	probeSentCount.WithLabelValues(job.IPAddress.String()).Add(float64(job.Sent_Count))
-	probeRecvCount.WithLabelValues(job.IPAddress.String()).Add(float64(job.Recv_Count))
-	probeLatencyTotal.WithLabelValues(job.IPAddress.String()).Add(float64(job.Roundtrip_Total) / 1000000.0)
+	probeSentCount.WithLabelValues(labels...).Add(float64(job.Sent_Count))
+	probeRecvCount.WithLabelValues(labels...).Add(float64(job.Recv_Count))
+	probeLatencyTotal.WithLabelValues(labels...).Add(float64(job.Roundtrip_Total) / 1000000.0)
 
 	// Take a snapshot of the results and copy pointers into a new array
 	results := job.Results.Snapshot()
@@ -255,15 +296,15 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// fmt.Println(limit, maxIndex, maxScore, bestRTT)
-	probeLoss.WithLabelValues(job.IPAddress.String()).Set(1.0 - float64(bestLoss)/(float64(maxIndex)))
-	probeSamples.WithLabelValues(job.IPAddress.String()).Set(float64(maxIndex))
-	probeLatency.WithLabelValues(job.IPAddress.String()).Set(float64(bestRTT) / (float64(bestLoss * 1000000.0)))
+	probeLoss.WithLabelValues(labels...).Set(1.0 - float64(bestLoss)/(float64(maxIndex)))
+	probeSamples.WithLabelValues(labels...).Set(float64(maxIndex))
+	probeLatency.WithLabelValues(labels...).Set(float64(bestRTT) / (float64(bestLoss * 1000000.0)))
 
 	// jobMap.Range(func(key any, value any) bool {
 	// 	if job, ok := value.(*PingJob); ok {
 	// 		job.Mutex.Lock()
-	// 		probeSentCount.WithLabelValues(job.IPAddress.String()).Add(float64(job.Sent_Count))
-	// 		probeRecvCount.WithLabelValues(job.IPAddress.String()).Add(float64(job.Recv_Count))
+	// 		probeSentCount.WithLabelValues(labels...).Add(float64(job.Sent_Count))
+	// 		probeRecvCount.WithLabelValues(labels...).Add(float64(job.Recv_Count))
 	// 		job.Mutex.Unlock()
 	// 	}
 	// 	return true
