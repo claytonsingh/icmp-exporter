@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	github.com/abursavich/nett v0.0.0-20150117192851-f31118c7aeb9 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
