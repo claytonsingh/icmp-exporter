@@ -239,6 +239,12 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	var bestLoss int = 0
 	var lastResult *PingResult
 	for n, r := range resultsSorted {
+
+		if r.Success {
+			sumRTT += r.RountripTime
+			sumRTT2 += r.RountripTime * r.RountripTime
+		}
+
 		w := W(n, len(results))
 		if w > 0 {
 			// After and Before avearages
@@ -249,11 +255,6 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 				cavg = -cavg
 			}
 			score := cavg * w
-
-			if r.Success {
-				sumRTT += r.RountripTime
-				sumRTT2 += r.RountripTime * r.RountripTime
-			}
 
 			// bo := " F"
 			// if r.Success {
