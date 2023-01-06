@@ -1,5 +1,5 @@
 default:
-  image: ubuntu:jammy
+  image: ubuntu:focal
 
 variables:
   GIT_DEPTH: 1
