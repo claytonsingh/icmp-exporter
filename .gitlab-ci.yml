@@ -14,7 +14,7 @@ build-amd64:
   tags: [docker]
   stage: build
   script:
-    - apt update && apt install -y ca-certificates build-essential
+    - apt update && apt install -y ca-certificates wget build-essential
     - wget -q https://go.dev/dl/go1.19.linux-amd64.tar.gz
     - tar -xf go1.19.linux-amd64.tar.gz
     - mv go /usr/local
@@ -30,7 +30,7 @@ build-arm64:
   tags: [docker]
   stage: build
   script:
-    - apt update && apt install -y ca-certificates build-essential gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+    - apt update && apt install -y ca-certificates wget build-essential gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
     - wget -q https://go.dev/dl/go1.19.linux-amd64.tar.gz
     - tar -xf go1.19.linux-amd64.tar.gz
     - mv go /usr/local
@@ -46,7 +46,7 @@ build-arm32:
   tags: [docker]
   stage: build
   script:
-    - apt update && apt install -y ca-certificates build-essential gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
+    - apt update && apt install -y ca-certificates wget build-essential gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
     - wget -q https://go.dev/dl/go1.19.linux-amd64.tar.gz
     - tar -xf go1.19.linux-amd64.tar.gz
     - mv go /usr/local
