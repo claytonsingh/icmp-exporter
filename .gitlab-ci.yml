@@ -3,6 +3,7 @@ default:
 
 variables:
   GIT_DEPTH: 1
+  TZ: UTC
 
 # Define Stages
 stages:
