@@ -15,7 +15,7 @@ build-amd64:
   stage: build
   script:
     - apt update && apt install -y ca-certificates wget build-essential
-    - wget -q https://go.dev/dl/go1.19.linux-amd64.tar.gz
+    - wget -q https://go.dev/dl/go1.19.4.linux-amd64.tar.gz
     - tar -xf go1.19.linux-amd64.tar.gz
     - mv go /usr/local
     - export GOROOT=/usr/local/go
@@ -31,7 +31,7 @@ build-arm64:
   stage: build
   script:
     - apt update && apt install -y ca-certificates wget build-essential gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
-    - wget -q https://go.dev/dl/go1.19.linux-amd64.tar.gz
+    - wget -q https://go.dev/dl/go1.19.4.linux-amd64.tar.gz
     - tar -xf go1.19.linux-amd64.tar.gz
     - mv go /usr/local
     - export GOROOT=/usr/local/go
@@ -47,7 +47,7 @@ build-arm32:
   stage: build
   script:
     - apt update && apt install -y ca-certificates wget build-essential gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
-    - wget -q https://go.dev/dl/go1.19.linux-amd64.tar.gz
+    - wget -q https://go.dev/dl/go1.19.4.linux-amd64.tar.gz
     - tar -xf go1.19.linux-amd64.tar.gz
     - mv go /usr/local
     - export GOROOT=/usr/local/go
