@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"sort"
@@ -16,14 +17,15 @@ import (
 )
 
 type PingJob struct {
-	IPAddress       net.IP
-	Sent_Count      int32
-	Recv_Count      int32
-	Roundtrip_Total int64 // In microseconds
-	Results         PDB
-	ResultLimit     int
-	LastAccess      time.Time
-	Mutex           sync.Mutex
+	IPAddress          net.IP
+	Sent_Count         int32
+	Recv_Count         int32
+	Roundtrip_Total    int64 // In microseconds
+	Roundtrip_Sq_Total int64 // In microseconds
+	Results            PDB
+	ResultLimit        int
+	LastAccess         time.Time
+	Mutex              sync.Mutex
 }
 
 func (this *PingJob) AddSample(sample PingResult) {
@@ -49,6 +51,7 @@ func (this *PingJob) AddSample(sample PingResult) {
 	if sample.Success {
 		this.Recv_Count += 1
 		this.Roundtrip_Total += sample.RountripTime
+		this.Roundtrip_Sq_Total += sample.RountripTime * sample.RountripTime
 	}
 	this.Mutex.Unlock()
 }
@@ -177,11 +180,23 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeLatencyTotal)
 
+	probeLatencySqTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "probe_latency_squared_seconds_total",
+		Help: "",
+	}, []string{"ip", "target"})
+	registry.MustRegister(probeLatencySqTotal)
+
 	probeLatency := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "probe_latency_seconds",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeLatency)
+
+	probeDeviation := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "probe_standard_deviation_seconds",
+		Help: "",
+	}, []string{"ip", "target"})
+	registry.MustRegister(probeDeviation)
 
 	probeLoss := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "probe_loss_ratio",
@@ -207,6 +222,7 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	probeSentCount.WithLabelValues(labels...).Add(float64(job.Sent_Count))
 	probeRecvCount.WithLabelValues(labels...).Add(float64(job.Recv_Count))
 	probeLatencyTotal.WithLabelValues(labels...).Add(float64(job.Roundtrip_Total) / 1000000.0)
+	probeLatencySqTotal.WithLabelValues(labels...).Add(float64(job.Roundtrip_Sq_Total) / (1000000.0 * 1000000.0))
 
 	// Take a snapshot of the results and copy pointers into a new array
 	results := job.Results.Snapshot()
@@ -301,6 +317,11 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	probeSamples.WithLabelValues(labels...).Set(float64(maxIndex))
 	probeLatency.WithLabelValues(labels...).Set(float64(bestRTT) / (float64(bestLoss * 1000000.0)))
 
+	// mean = sum_x / n
+	// stdev = sqrt((sum_x2 / n) - (mean * mean))
+	mean := (float64(sumRTT) / 1000000.0) / float64(maxIndex)
+	mean2 := (float64(sumRTT2) / (1000000.0 * 1000000.0)) / float64(maxIndex)
+	probeDeviation.WithLabelValues(labels...).Set(math.Sqrt(mean2 - mean*mean))
 	// jobMap.Range(func(key any, value any) bool {
 	// 	if job, ok := value.(*PingJob); ok {
 	// 		job.Mutex.Lock()
