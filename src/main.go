@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -72,6 +73,14 @@ func main() {
 	use_hardware := flag.Bool("hard", false, "Use hardware timestamping")
 	listen_addr := flag.String("listen", ":9116", "ip and port to listen on, defaults to :9116")
 	flag.Parse()
+
+	if *iface == "" {
+		*iface, _ = GetDefaultRouteInterface()
+	}
+	if *iface == "" {
+		fmt.Println("interface is not set")
+		os.Exit(1)
+	}
 
 	p := NewICMPNative(*use_hardware, *iface)
 	p.Start()
