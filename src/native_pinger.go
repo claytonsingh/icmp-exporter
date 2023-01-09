@@ -30,7 +30,7 @@ type ICMPNative struct {
 	m_job_mutex       sync.Mutex
 	m_mutex           sync.RWMutex
 	m_started         bool
-	m_timeout         float32
+	m_timeout         time.Duration
 	m_pingrate        float32
 	m_identifier      uint16
 	m_timestamp_type  int
@@ -42,7 +42,7 @@ func NewICMPNative(hardware bool, iface string) *ICMPNative {
 	var this ICMPNative
 	this.m_identifier = (uint16)(os.Getpid())
 	this.m_nativePinger = orderedmap.NewOrderedMap[uint64, *nativePinger]()
-	this.m_timeout = 3
+	this.m_timeout = time.Duration(3) * time.Second
 	this.m_pingrate = 2
 	this.m_interface = iface
 
@@ -89,68 +89,6 @@ func (this *ICMPNative) SetJobs(jobs []*PingJob) {
 	this.m_job_mutex.Unlock()
 }
 
-func (this *ICMPNative) addSample(pinger *nativePinger, id uint64, success bool) {
-	this.m_mutex.Lock()
-	this.m_nativePinger.Delete(id)
-	this.m_mutex.Unlock()
-
-	// if there was an error ont count the packet
-	if pinger.timestampSend == -1 || pinger.timestampRecv == -1 {
-		return
-	}
-
-	if success {
-		if pinger.timestampSend < pinger.timestampRecv {
-			pinger.Job.AddSample(PingResult{
-				Success:      true,
-				RountripTime: pinger.timestampRecv - pinger.timestampSend,
-				Timestamp:    pinger.timestampStart,
-			})
-		}
-	} else {
-		pinger.Job.AddSample(PingResult{
-			Success:      false,
-			RountripTime: 0,
-			Timestamp:    pinger.timestampStart,
-		})
-	}
-
-	// pinger.Job.Mutex.Lock()
-	// pinger.Job.Sent_Count += 1
-	// if success {
-	// 	pinger.Job.Recv_Count += 1
-	// 	pinger.Job.Results.Append()
-	// } else {
-	// 	pinger.Job.Results.Append(PingResult{
-	// 		Success:      false,
-	// 		RountripTime: 0,
-	// 		Timestamp:  pinger.timestampStart,
-	// 	})
-	// }
-	// pinger.Job.Mutex.Unlock()
-
-	// pinger.Job.Mutex.Lock()
-	// var s string
-	// var cnt float32
-	// s += fmt.Sprintf(" %-15v", pinger.Job.IPAddress)
-	// sn := pinger.Job.Results.Snapshot()
-	// for _,r := range sn {
-	// 	if r.Success {
-	// 		s += fmt.Sprintf(" %5.2f", r.RountripTime * 1000)
-	// 		cnt += 1
-	// 	} else {
-	// 		s += "     X"
-	// 	}
-	// }
-	// if success {
-	// 	s = "Success" + fmt.Sprintf(" %5.2f", cnt / (float32)(len(sn))) + fmt.Sprintf(" %d %d", pinger.Job.Recv_Count, pinger.Job.Sent_Count) + " " + s
-	// } else {
-	// 	s = "Failed " + fmt.Sprintf(" %5.2f", cnt / (float32)(len(sn))) + fmt.Sprintf("%d %d", pinger.Job.Recv_Count, pinger.Job.Sent_Count) + " " + s
-	// }
-	// fmt.Println(s)
-	// pinger.Job.Mutex.Unlock()
-}
-
 func (this *ICMPNative) timeout_thread() {
 	for {
 		this.m_mutex.RLock()
@@ -158,16 +96,40 @@ func (this *ICMPNative) timeout_thread() {
 		this.m_mutex.RUnlock()
 		// fmt.Println(this.m_nativePinger)
 		if front == nil {
-			time.Sleep(time.Duration(this.m_timeout*1000) * time.Millisecond)
+			time.Sleep(this.m_timeout)
 		} else {
-			dt := front.Value.timestampStart.Sub(time.Now()) + time.Second*time.Duration(this.m_timeout)
-			// fmt.Println("DT:", dt, &front.Value.Job, front.Key, front.Value.Job.IPAddress, front.Value.Job.Sent_count)
+			pinger := front.Value
+
+			dt := pinger.timestampStart.Sub(time.Now()) + this.m_timeout
+			// fmt.Println("DT:", dt, &pinger.Job, front.Key, pinger.Job.IPAddress, pinger.Job.Sent_count)
 			if dt > 0 {
 				time.Sleep(dt)
 			}
-			front.Value.m_mutex.Lock()
-			this.addSample(front.Value, front.Key, false)
-			front.Value.m_mutex.Unlock()
+
+			this.m_mutex.Lock()
+			this.m_nativePinger.Delete(front.Key)
+			this.m_mutex.Unlock()
+
+			pinger.m_mutex.Lock()
+			// if there was an error dont count the packet
+			if pinger.timestampSend != -1 && pinger.timestampRecv != -1 && pinger.timestampSend <= pinger.timestampRecv {
+
+				// if both sent and recv are set then we count it as a success
+				if pinger.timestampSend > 0 && pinger.timestampRecv > 0 {
+					pinger.Job.AddSample(PingResult{
+						Success:      true,
+						RountripTime: pinger.timestampRecv - pinger.timestampSend,
+						Timestamp:    pinger.timestampStart,
+					})
+				} else {
+					pinger.Job.AddSample(PingResult{
+						Success:      false,
+						RountripTime: 0,
+						Timestamp:    pinger.timestampStart,
+					})
+				}
+			}
+			pinger.m_mutex.Unlock()
 		}
 	}
 }
@@ -183,6 +145,7 @@ func (this *ICMPNative) transmit_thread() {
 		this.m_job_mutex.Unlock()
 		if len(jobs) == 0 {
 			time.Sleep(1 * time.Second)
+			continue
 		}
 		for idx := range jobs {
 			id = id + 1
@@ -263,19 +226,11 @@ func (this *ICMPNative) receive_thread() {
 					this.m_mutex.RUnlock()
 
 					if ok && ip4.SrcIP.Equal(np.Job.IPAddress) && ic4.TypeCode == 0 && ic4.Seq == np.packet.SequenceNumber {
-
-						addSample := false
 						np.m_mutex.Lock()
 						if np.timestampRecv == 0 {
 							np.timestampRecv = ts
-							if np.timestampSend != 0 {
-								addSample = true
-							}
 						}
 						np.m_mutex.Unlock()
-						if addSample {
-							this.addSample(np, id, true)
-						}
 					}
 				}
 
@@ -332,9 +287,6 @@ func (this *ICMPNative) error_thread() {
 						np.m_mutex.Lock()
 						if np.timestampSend == 0 {
 							np.timestampSend = ts
-							if np.timestampRecv != 0 {
-								this.addSample(np, id, true)
-							}
 						}
 						np.m_mutex.Unlock()
 					}
