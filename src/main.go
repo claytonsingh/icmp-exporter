@@ -226,7 +226,6 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 
 	labels := []string{job.IPAddress.String(), requestTarget}
 
-	resultsSorted := make([]*PingResult, 0, job.Results.Size)
 	job.Mutex.Lock()
 	probeSentCount.WithLabelValues(labels...).Add(float64(job.Sent_Count))
 	probeRecvCount.WithLabelValues(labels...).Add(float64(job.Recv_Count))
@@ -238,32 +237,24 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	if job.ResultLimit < len(results) {
 		results = results[len(results)-job.ResultLimit:]
 	}
-	for n := range results {
-		r := &results[len(results)-n-1]
-		resultsSorted = append(resultsSorted, r)
-	}
 	job.Mutex.Unlock()
 
-	// Sort the results since they can be out of order
-	sort.Slice(resultsSorted, func(i int, j int) bool {
-		return resultsSorted[i].Timestamp.After(resultsSorted[j].Timestamp)
-	})
-
 	var a, b int
-	for _, r := range resultsSorted {
+	for _, r := range results {
 		if r.Success {
 			a += 1
 		}
 	}
 
 	var maxScore float32 = 0.12
-	var maxIndex int = len(resultsSorted)
+	var maxIndex int = len(results)
 	var sumRTT int64 = 0
 	var sumRTT2 int64 = 0
 	var bestRTT int64 = 0
 	var bestLoss int = 0
 	var lastResult *PingResult
-	for n, r := range resultsSorted {
+	for n := range results {
+		r := &results[len(results)-1-n]
 
 		if r.Success {
 			sumRTT += r.RountripTime
@@ -272,7 +263,7 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 
 		w := W(n, len(results))
 		if w > 0 {
-			// After and Before avearages
+			// After and Before averages
 			aavg := float32(a) / float32(len(results)-n)
 			bavg := float32(b) / float32(n)
 			cavg := aavg - bavg
@@ -304,9 +295,9 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 			b += 1
 		}
 	}
-	// fmt.Println(maxIndex, len(resultsSorted))
+	// fmt.Println(maxIndex, len(results))
 
-	if maxIndex == len(resultsSorted) {
+	if maxIndex == len(results) {
 		bestLoss = b
 		bestRTT = sumRTT
 	}
