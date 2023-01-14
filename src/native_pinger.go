@@ -36,6 +36,7 @@ type ICMPNative struct {
 	m_timestamp_type  int
 	m_timestamp_flags int
 	m_interface       string
+	m_next_packet     time.Time
 }
 
 func NewICMPNative(hardware bool, iface string) *ICMPNative {
@@ -147,9 +148,25 @@ func (this *ICMPNative) transmit_thread() {
 			time.Sleep(1 * time.Second)
 			continue
 		}
+
+		interpacket_duration := time.Duration(this.m_pingrate*1000) * time.Millisecond / time.Duration(len(jobs))
+
 		for idx := range jobs {
 			id = id + 1
-			time.Sleep(time.Duration(this.m_pingrate*1000) * time.Millisecond / time.Duration(len(jobs)))
+
+			this.m_next_packet = this.m_next_packet.Add(interpacket_duration)
+
+			now := time.Now()
+			dt := this.m_next_packet.Sub(now)
+			// fmt.Println("send", dt, interpacket_duration)
+			if dt > 0 {
+				time.Sleep(dt)
+			} else if dt < time.Second {
+				this.m_next_packet = now
+			} else if dt < time.Millisecond*-10 {
+				this.m_next_packet = now.Add(time.Millisecond * -10)
+			}
+
 			var x nativePinger
 			x.timestampStart = time.Now()
 			x.Job = jobs[idx]
