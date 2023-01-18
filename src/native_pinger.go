@@ -24,7 +24,8 @@ type nativePinger struct {
 }
 
 type ICMPNative struct {
-	m_socket          int
+	m_socket_4        int
+	m_socket_6        int
 	m_nativePinger    *orderedmap.OrderedMap[uint64, *nativePinger]
 	m_jobs            []*PingJob
 	m_job_mutex       sync.Mutex
@@ -67,21 +68,31 @@ func (this *ICMPNative) Start() {
 	if socket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_ICMP); err != nil {
 		panic(err)
 	} else {
-		this.m_socket = socket
+		this.m_socket_4 = socket
 	}
 
-	// if err := socket_set_ioctl(this.m_socket, "ens16", flags); err != nil {
-	// 	panic(err)
-	// }
-	if err := socket_set_ioctl_native(this.m_socket, this.m_interface, this.m_timestamp_flags); err < 0 {
+	if err := socket_set_ioctl_native(this.m_socket_4, this.m_interface, this.m_timestamp_flags); err < 0 {
 		panic(err)
 	}
-	socket_set_flags(this.m_socket, this.m_timestamp_flags, 0, 0)
+	socket_set_flags(this.m_socket_4, this.m_timestamp_flags, 0, 0)
+
+	if socket, err := syscall.Socket(syscall.AF_INET6, syscall.SOCK_RAW, syscall.IPPROTO_ICMPV6); err != nil {
+		panic(err)
+	} else {
+		this.m_socket_6 = socket
+	}
+
+	if err := socket_set_ioctl_native(this.m_socket_6, this.m_interface, this.m_timestamp_flags); err < 0 {
+		panic(err)
+	}
+	socket_set_flags(this.m_socket_6, this.m_timestamp_flags, 0, 0)
 
 	go this.timeout_thread()
 	go this.transmit_thread()
-	go this.receive_thread()
-	go this.error_thread()
+	go this.receive_thread(this.m_socket_4)
+	go this.receive_thread(this.m_socket_6)
+	go this.error_thread(this.m_socket_4)
+	go this.error_thread(this.m_socket_6)
 }
 
 func (this *ICMPNative) SetJobs(jobs []*PingJob) {
@@ -170,110 +181,159 @@ func (this *ICMPNative) transmit_thread() {
 			var x nativePinger
 			x.timestampStart = time.Now()
 			x.Job = jobs[idx]
-			// timestampSend  int64
-			// timestampRecv  int64
-			// packet         IcmpPacket
-			//fmt.Println("Tx:", &x.Job, x.PacketIndex, x.Job.SequenceNumber)
+
 			this.m_mutex.Lock()
 			this.m_nativePinger.Set(id, &x)
 			this.m_mutex.Unlock()
 
-			x.packet = IcmpPacket{
-				Type:           8,
-				Code:           0,
-				Identifier:     this.m_identifier,
-				SequenceNumber: SequenceNumber,
-				// Payload: []byte{
-				// 	00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00,
-				// },
-				Payload: []byte("\000\000\000\000\000\000\000\000....Hello World................................."),
-				//                                               ........................................................
-			}
+			if IsIPv4(x.Job.IPAddress) {
+				x.packet = IcmpPacket{
+					Type:           8,
+					Code:           0,
+					Identifier:     this.m_identifier,
+					SequenceNumber: SequenceNumber,
+					Payload:        []byte("\000\000\000\000\000\000\000\000....Hello World................................."),
+					//                                              ........................................................
+				}
+				WriteUint64(x.packet.Payload, 0, id)
 
-			WriteUint64(x.packet.Payload, 0, id)
-			n := x.packet.Serialize(buf)
-			// y := x.Job.IPAddress
-			//address := syscall.SockaddrInet4{}
-			//copy(address, x.Job.IPAddress[12:16])
-			// var arr [4]byte
-			// ii := x.Job.IPAddress
+				n := x.packet.Serialize4(buf)
+				address := syscall.SockaddrInet4{Addr: Ipv4ToBytes(x.Job.IPAddress)}
+				if err := syscall.Sendto(this.m_socket_4, buf[:n], 0, &address); err != nil {
+					panic(err)
+				}
+			} else {
+				x.packet = IcmpPacket{
+					Type:           128,
+					Code:           0,
+					Identifier:     this.m_identifier,
+					SequenceNumber: SequenceNumber,
+					Payload:        []byte("\000\000\000\000\000\000\000\000....Hello World................................."),
+					//                                              ........................................................
+				}
+				WriteUint64(x.packet.Payload, 0, id)
 
-			// fmt.Println("tx A1: ", arr, ii, ii[:], x.Job.IPAddress, x.Job.IPAddress[:], x.Job.IPAddress[12], x.Job.IPAddress[13], x.Job.IPAddress[14], x.Job.IPAddress[15])
-			// copy(address, ([4]byte)x.Job.IPAddress[12:])
-			// fmt.Println("tx A2: ", arr, x.Job.IPAddress)
-			// fmt.Println("tx A2: ", address.Addr)
-
-			ipv4 := x.Job.IPAddress.To4()
-			address := syscall.SockaddrInet4{Addr: [4]byte{ipv4[0], ipv4[1], ipv4[2], ipv4[3]}}
-			// ipv16 := x.Job.IPAddress.To16()
-			// address := syscall.SockaddrInet6{Addr: [16]byte{}}
-			// copy(address.Addr[:], ipv16[:])
-			// fmt.Printf("rx data: %v - % X \n", address, address.Addr)
-			if err := syscall.Sendto(this.m_socket, buf[:n], 0, &address); err != nil {
-				panic(err)
+				n := x.packet.Serialize6(buf)
+				address := syscall.SockaddrInet6{Addr: Ipv6ToBytes(x.Job.IPAddress)}
+				if err := syscall.Sendto(this.m_socket_6, buf[:n], 0, &address); err != nil {
+					panic(err)
+				}
 			}
 		}
 		SequenceNumber += 1
 	}
 }
 
-func (this *ICMPNative) receive_thread() {
+func (this *ICMPNative) receive_thread(sock int) {
 	data := make([]byte, syscall.Getpagesize())
 	for true {
-		ndata, ts := recvpacket_v4(this.m_socket, data, 0, this.m_timestamp_type)
+		ip, ndata, ts := recvpacket_v4(sock, data, 0, this.m_timestamp_type)
 		if ndata < 0 {
 			panic(ndata)
-		} else {
+		} else if ip != nil {
+			//fmt.Printf("rx msg:  %v %v\n", ip.String(), ts)
 			//fmt.Printf("rx data: %v - % X\n", ndata, data[:ndata])
-			//fmt.Printf("rx msg:  %v\n", ts)
 
-			//var eth layers.Ethernet
-			var ip4 layers.IPv4
-			var ic4 layers.ICMPv4
+			if IsIPv4(ip) {
+				//var eth layers.Ethernet
+				var ip4 layers.IPv4
+				var ic4 layers.ICMPv4
 
-			parser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ip4, &ic4)
-			parser.IgnoreUnsupported = true
-			decoded := []gopacket.LayerType{}
-			if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
-				if len(decoded) == 2 && len(ic4.Payload) > 8 {
-					id := ReadUInt64(ic4.Payload, 0)
+				parser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ip4, &ic4)
+				parser.IgnoreUnsupported = true
+				decoded := []gopacket.LayerType{}
+				if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
+					for _, layer := range decoded {
+						if layer == layers.LayerTypeICMPv4 {
+							if len(ic4.Payload) >= 8 {
+								id := ReadUInt64(ic4.Payload, 0)
 
-					this.m_mutex.RLock()
-					np, ok := this.m_nativePinger.Get(id)
-					this.m_mutex.RUnlock()
+								this.m_mutex.RLock()
+								np, ok := this.m_nativePinger.Get(id)
+								this.m_mutex.RUnlock()
 
-					if ok && ip4.SrcIP.Equal(np.Job.IPAddress) && ic4.TypeCode == 0 && ic4.Seq == np.packet.SequenceNumber {
-						np.m_mutex.Lock()
-						if np.timestampRecv == 0 {
-							np.timestampRecv = ts
+								if ok && np.Job.IPAddress.Equal(ip4.SrcIP) && ic4.TypeCode == 0 && ic4.Seq == np.packet.SequenceNumber {
+									np.m_mutex.Lock()
+									if np.timestampRecv == 0 {
+										np.timestampRecv = ts
+									}
+									np.m_mutex.Unlock()
+								}
+							}
 						}
-						np.m_mutex.Unlock()
 					}
-				}
 
-				// for _, layerType := range decoded {
-				// 	switch layerType {
-				// 	// case layers.LayerTypeIPv6:
-				// 	// 	fmt.Println("    IP6 ", ip6.SrcIP, ip6.DstIP)
-				// 	case layers.LayerTypeIPv4:
-				// 		fmt.Println("rx IP4: ", ip4.SrcIP, ip4.DstIP)
-				// 	case layers.LayerTypeICMPv4:
-				// 		fmt.Println("rx IC4: ", ic4.Seq, ic4.Payload)
-				// 	}
-				// }
-			} else {
-				fmt.Println("err ", err)
+					// for _, layerType := range decoded {
+					// 	switch layerType {
+					// 	// case layers.LayerTypeIPv6:
+					// 	// 	fmt.Println("    IP6 ", ip6.SrcIP, ip6.DstIP)
+					// 	case layers.LayerTypeIPv4:
+					// 		fmt.Println("rx IP4: ", ip4.SrcIP, ip4.DstIP)
+					// 	case layers.LayerTypeICMPv4:
+					// 		fmt.Println("rx IC4: ", ic4.Seq, ic4.Payload)
+					// 	}
+					// }
+				} else {
+					fmt.Println("rx err ", err)
+				}
+			} else if IsIPv6(ip) {
+				var ic6 layers.ICMPv6
+
+				parser := gopacket.NewDecodingLayerParser(layers.LayerTypeICMPv6, &ic6)
+				parser.IgnoreUnsupported = true
+				decoded := []gopacket.LayerType{}
+				if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
+					for _, layer := range decoded {
+						if layer == layers.LayerTypeICMPv6 {
+							if len(ic6.Payload) >= 12 {
+								id := ReadUInt64(ic6.Payload, 4)
+								Seq := ReadUInt16(ic6.Payload, 2)
+
+								this.m_mutex.RLock()
+								np, ok := this.m_nativePinger.Get(id)
+								this.m_mutex.RUnlock()
+
+								//fmt.Println("rx YYY", ok, np, ts)
+								//fmt.Printf("tx2 data: %v - % X\n", ndata, data[:ndata])
+								//fmt.Println("rx YYY", ok, ip4.DstIP.Equal(np.Job.IPAddress), ic4.TypeCode == (8<<8), ts)
+								//fmt.Println("rx YYY", ok, ip6.DstIP, ic6.TypeCode == (128<<8), Seq == np.packet.SequenceNumber, ts)
+								//fmt.Printf("tx3 data: % X\n", ip6.Payload)
+
+								if ok && np.Job.IPAddress.Equal(ip) && ic6.TypeCode&0xFF00 == 0x8100 && Seq == np.packet.SequenceNumber {
+									np.m_mutex.Lock()
+									if np.timestampRecv == 0 {
+										np.timestampRecv = ts
+									}
+									np.m_mutex.Unlock()
+								}
+							}
+						}
+					}
+
+					// for _, layerType := range decoded {
+					// 	switch layerType {
+					// 	// case layers.LayerTypeIPv6:
+					// 	// 	fmt.Println("    IP6 ", ip6.SrcIP, ip6.DstIP)
+					// 	case layers.LayerTypeIPv4:
+					// 		fmt.Println("rx IP4: ", ip4.SrcIP, ip4.DstIP)
+					// 	case layers.LayerTypeICMPv4:
+					// 		fmt.Println("rx IC4: ", ic4.Seq, ic4.Payload)
+					// 	}
+					// }
+				} else {
+					fmt.Println("rx err ", err)
+				}
 			}
 		}
 	}
 }
 
-func (this *ICMPNative) error_thread() {
+func (this *ICMPNative) error_thread(sock int) {
 	data := make([]byte, syscall.Getpagesize())
 	for true {
-		ndata, ts := recvpacket_v4(this.m_socket, data, unix.MSG_ERRQUEUE|unix.MSG_DONTWAIT, this.m_timestamp_type)
+		_, ndata, ts := recvpacket_v4(sock, data, unix.MSG_ERRQUEUE|unix.MSG_DONTWAIT, this.m_timestamp_type)
 		if ndata == -1 {
-			fds := []unix.PollFd{{Fd: int32(this.m_socket), Events: unix.POLLERR}}
+			fds := []unix.PollFd{{Fd: int32(sock), Events: unix.POLLERR}}
 			unix.Poll(fds, 2100)
 			//fmt.Printf("tx poll: %v %v\n", fds[0].Events, fds[0].Revents)
 			continue
@@ -281,31 +341,58 @@ func (this *ICMPNative) error_thread() {
 			panic(ndata)
 		} else {
 			// ihl := (data[0] & 0x0F) * 4
-			// fmt.Printf("tx data: %v - % X\n", ndata, data[14:ndata])
+			// fmt.Printf("tx data: %v - % X\n", ndata, data[:ndata])
 			// fmt.Printf("tx msg:  %v\n", ts)
 
 			var eth layers.Ethernet
 			var ip4 layers.IPv4
 			var ic4 layers.ICMPv4
+			var ip6 layers.IPv6
+			var ic6 layers.ICMPv6
 
-			parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4, &ic4)
+			parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4, &ic4, &ip6, &ic6)
 			parser.IgnoreUnsupported = true
 			decoded := []gopacket.LayerType{}
 			if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
-				if len(decoded) == 3 {
-					id := ReadUInt64(ic4.Payload, 0)
+				for _, layer := range decoded {
+					if layer == layers.LayerTypeICMPv4 {
+						id := ReadUInt64(ic4.Payload, 0)
 
-					this.m_mutex.RLock()
-					np, ok := this.m_nativePinger.Get(id)
-					this.m_mutex.RUnlock()
+						this.m_mutex.RLock()
+						np, ok := this.m_nativePinger.Get(id)
+						this.m_mutex.RUnlock()
 
-					// fmt.Println("rx YYY", ok, ip4.DstIP.Equal(np.Job.IPAddress), ic4.TypeCode == (8 << 8) , ic4.Seq == np.packet.SequenceNumber)
-					if ok && ip4.DstIP.Equal(np.Job.IPAddress) && ic4.TypeCode == (8<<8) && ic4.Seq == np.packet.SequenceNumber {
-						np.m_mutex.Lock()
-						if np.timestampSend == 0 {
-							np.timestampSend = ts
+						// fmt.Println("rx YYY", ok, ip4.DstIP.Equal(np.Job.IPAddress), ic4.TypeCode == (8<<8), ic4.Seq == np.packet.SequenceNumber)
+						if ok && ip4.DstIP.Equal(np.Job.IPAddress) && ic4.TypeCode == (8<<8) && ic4.Seq == np.packet.SequenceNumber {
+							np.m_mutex.Lock()
+							if np.timestampSend == 0 {
+								np.timestampSend = ts
+							}
+							np.m_mutex.Unlock()
 						}
-						np.m_mutex.Unlock()
+						break
+					} else if layer == layers.LayerTypeICMPv6 {
+						id := ReadUInt64(ip6.Payload, 8)
+						Seq := ReadUInt16(ip6.Payload, 6)
+
+						this.m_mutex.RLock()
+						np, ok := this.m_nativePinger.Get(id)
+						this.m_mutex.RUnlock()
+
+						//fmt.Println("rx YYY", ok, np, ts)
+						//fmt.Printf("tx2 data: %v - % X\n", ndata, data[:ndata])
+						//fmt.Println("rx YYY", ok, ip4.DstIP.Equal(np.Job.IPAddress), ic4.TypeCode == (8<<8), ts)
+						//fmt.Println("rx YYY", ok, ip6.DstIP, ic6.TypeCode == (128<<8), Seq == np.packet.SequenceNumber, ts)
+						//fmt.Printf("tx3 data: % X\n", ip6.Payload)
+
+						if ok && ip6.DstIP.Equal(np.Job.IPAddress) && ic6.TypeCode&0xFF00 == 0x8000 && Seq == np.packet.SequenceNumber {
+							np.m_mutex.Lock()
+							if np.timestampSend == 0 {
+								np.timestampSend = ts
+							}
+							np.m_mutex.Unlock()
+						}
+						break
 					}
 				}
 
@@ -320,7 +407,7 @@ func (this *ICMPNative) error_thread() {
 				// 	}
 				// }
 			} else {
-				fmt.Println("err ", err)
+				fmt.Println("er err ", err)
 			}
 		}
 	}

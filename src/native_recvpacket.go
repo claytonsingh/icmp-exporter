@@ -51,7 +51,7 @@ static int64_t get_timestamp(struct msghdr *msg, int32_t timestamp_type)
 }
 
 // int recvpacket_v4(int32_t sock, uint8_t* data, uint32_t data_len, uint32_t* addr, int64_t* u_seconds, int32_t recvmsg_flags)
-int recvpacket_v4(int32_t sock, uint8_t* data, uint32_t data_len, int64_t* u_seconds, int32_t recvmsg_flags, int32_t timestamp_type)
+int recvpacket_v4(int32_t sock, uint8_t* name, uint8_t* data, uint32_t data_len, int64_t* u_seconds, int32_t recvmsg_flags, int32_t timestamp_type)
 {
 	struct msghdr msg;
 	struct iovec entry;
@@ -66,8 +66,8 @@ int recvpacket_v4(int32_t sock, uint8_t* data, uint32_t data_len, int64_t* u_sec
 	msg.msg_iovlen = 1;
 	entry.iov_base = data;
 	entry.iov_len = data_len;
-	msg.msg_name = 0;
-	msg.msg_namelen = 0;
+	msg.msg_name = name;
+	msg.msg_namelen = 32;
 	msg.msg_control = &control;
 	msg.msg_controllen = sizeof(control);
 
@@ -121,11 +121,28 @@ int socket_set_ioctl(int sock, char* ifname, int so_timestamping_flags)
 */
 import "C"
 import (
+	"net"
 	"unsafe"
 )
 
-func recvpacket_v4(fd int, data []byte, recvmsg_flags int32, timestamp_type int) (result int, u_seconds int64) {
-	result = (int)(C.recvpacket_v4(C.int32_t(fd), (*C.uint8_t)(unsafe.Pointer(&data[0])), C.uint32_t(len(data)), (*C.int64_t)(unsafe.Pointer(&u_seconds)), C.int32_t(recvmsg_flags), C.int32_t(timestamp_type)))
+func recvpacket_v4(fd int, data []byte, recvmsg_flags int32, timestamp_type int) (address net.IP, result int, u_seconds int64) {
+	var name [32]byte
+	result = (int)(C.recvpacket_v4(C.int32_t(fd), (*C.uint8_t)(unsafe.Pointer(&name[0])), (*C.uint8_t)(unsafe.Pointer(&data[0])), C.uint32_t(len(data)), (*C.int64_t)(unsafe.Pointer(&u_seconds)), C.int32_t(recvmsg_flags), C.int32_t(timestamp_type)))
+
+	switch int(name[0]) | (int(name[1]) << 8) {
+	case 0x0002:
+		address = make(net.IP, 4)
+		copy(address[:], name[4:4+4])
+		break
+	case 0x000A:
+		address = make(net.IP, 16)
+		copy(address[:], name[8:8+16])
+		break
+	default:
+		address = make(net.IP, 0)
+		break
+	}
+	// fmt.Println("recvpacket_v4: ", address.String())
 	return
 }
 

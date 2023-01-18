@@ -9,7 +9,7 @@ type IcmpPacket struct {
 	Payload        []byte
 }
 
-func (packet IcmpPacket) Serialize(buffer []byte) int {
+func (packet IcmpPacket) Serialize4(buffer []byte) int {
 
 	length := 8 + len(packet.Payload)
 	nw := NewNetworkWriter(buffer)
@@ -22,12 +22,12 @@ func (packet IcmpPacket) Serialize(buffer []byte) int {
 	nw.WriteBytes(packet.Payload)
 
 	nw.Seek(2)
-	nw.WriteUint16(ComputeChecksum(buffer, 0, length))
+	nw.WriteUint16(ComputeChecksum4(buffer, 0, length))
 
 	return length
 }
 
-func ComputeChecksum(packet []byte, index int, count int) uint16 {
+func ComputeChecksum4(packet []byte, index int, count int) uint16 {
 	// https://tools.ietf.org/html/rfc1071
 	var xsum uint = 0
 
@@ -50,4 +50,22 @@ func ComputeChecksum(packet []byte, index int, count int) uint16 {
 	}
 
 	return (uint16)(0xFFFF ^ xsum)
+}
+
+func (packet IcmpPacket) Serialize6(buffer []byte) int {
+
+	length := 8 + len(packet.Payload)
+	nw := NewNetworkWriter(buffer)
+
+	nw.WriteByte(packet.Type)
+	nw.WriteByte(packet.Code)
+	nw.WriteUint16(0)
+	nw.WriteUint16(packet.Identifier)
+	nw.WriteUint16(packet.SequenceNumber)
+	nw.WriteBytes(packet.Payload)
+
+	//nw.Seek(2)
+	//nw.WriteUint16(ComputeChecksum6(buffer, 0, length))
+
+	return length
 }
