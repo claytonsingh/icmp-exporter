@@ -124,15 +124,43 @@ func W(n int, l int) float32 {
 	return 1
 }
 
+func Filter[T any](slice []T, predicate func(T) bool) []T {
+	filtered := make([]T, 0)
+	for _, v := range slice {
+		if predicate(v) {
+			filtered = append(filtered, v)
+		}
+	}
+	return filtered
+}
+
 func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 
 	var target string = ""
+	var ip_version string = "46"
 
 	if params.Has("target") {
 		target = params.Get("target")
 	} else if params.Has("ip") {
 		target = params.Get("ip")
+	}
+
+	if params.Has("ip_version") {
+		switch params.Get("ip_version") {
+		case "4":
+			ip_version = "4"
+			break
+		case "6":
+			ip_version = "6"
+			break
+		case "46":
+			ip_version = "46"
+			break
+		case "64":
+			ip_version = "64"
+			break
+		}
 	}
 
 	if target == "" {
@@ -152,15 +180,43 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 			w.Write(([]byte)("# 400 - unable to resolve target=\"" + target + "\""))
 			return
 		}
-		sort.Slice(addresses, func(i int, j int) bool {
-			return bytes.Compare(addresses[i], addresses[j]) < 0
-		})
+
+		// If client is requesting only ipv4 or ipv6
+		if ip_version == "4" {
+			addresses = Filter(addresses, IsIPv4)
+		} else if ip_version == "6" {
+			addresses = Filter(addresses, IsIPv6)
+		}
+
+		if ip_version == "46" {
+			// If requesting 46 then sort ipv4 first
+			sort.Slice(addresses, func(i int, j int) bool {
+				if IsIPv4(addresses[i]) && IsIPv6(addresses[j]) {
+					return true
+				}
+				return bytes.Compare(addresses[i], addresses[j]) < 0
+			})
+		} else if ip_version == "64" {
+			// If requesting 64 then sort ipv6 first
+			sort.Slice(addresses, func(i int, j int) bool {
+				if IsIPv6(addresses[i]) && IsIPv4(addresses[j]) {
+					return true
+				}
+				return bytes.Compare(addresses[i], addresses[j]) < 0
+			})
+		} else {
+			sort.Slice(addresses, func(i int, j int) bool {
+				return bytes.Compare(addresses[i], addresses[j]) < 0
+			})
+		}
+
 		for _, address := range addresses {
-			if address.IsGlobalUnicast() && bytes.HasPrefix(address.To16(), []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF}) {
+			if address.IsGlobalUnicast() {
 				requestIp = address
 				break
 			}
 		}
+
 		if requestIp == nil {
 			w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusBadRequest)

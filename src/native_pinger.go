@@ -216,7 +216,16 @@ func (this *ICMPNative) transmit_thread() {
 				n := x.packet.Serialize6(buf)
 				address := syscall.SockaddrInet6{Addr: Ipv6ToBytes(x.Job.IPAddress)}
 				if err := syscall.Sendto(this.m_socket_6, buf[:n], 0, &address); err != nil {
-					panic(err)
+					switch err {
+					case syscall.ENETUNREACH: // network is unreachable
+					case syscall.EHOSTUNREACH: // host is unreachable
+						x.m_mutex.Lock()
+						x.timestampSend = -1
+						x.m_mutex.Unlock()
+						break
+					default:
+						panic(err)
+					}
 				}
 			}
 		}
