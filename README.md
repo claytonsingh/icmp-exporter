@@ -1,7 +1,7 @@
 # What is prom-icmp?
 Prom icmp is an ICMP poller for prometheus.
 
-The major change from blackbox is that we use counters where possible and asynchronous send packets in the background.
+The major change from blackbox is that we use counters where possible and asynchronously send packets in the background.
 
 # Command line
 ```
@@ -14,7 +14,7 @@ Usage of prom-icmp:
         ip and port to listen on, defaults to :9116 (default ":9116")
 ```
 
-# URL Arguments
+# URL parameters
 ```
 target
         The ip or hostname you want to ping
