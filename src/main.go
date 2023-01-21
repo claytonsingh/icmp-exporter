@@ -174,10 +174,6 @@ func main() {
 	}()
 	go PruneMap()
 
-	// if _, new := GetJob(net.IPv4(10, 10, 0, 1)); new {
-	// 	signal.Signal()
-	// }
-
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/probe", ProbeHander)
 	http.ListenAndServe(settings.listen_addr, nil)

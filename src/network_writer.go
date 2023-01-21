@@ -9,7 +9,7 @@ func NewNetworkWriter(buffer []byte) NetworkWriter {
 	return NetworkWriter{m_buffer: buffer}
 }
 
-func (nw *NetworkWriter) WriteByte(value byte) {
+func (nw *NetworkWriter) WriteUint8(value byte) {
 	nw.m_buffer[nw.m_index] = value
 	nw.m_index += 1
 }

@@ -14,8 +14,8 @@ func (packet IcmpPacket) Serialize4(buffer []byte) int {
 	length := 8 + len(packet.Payload)
 	nw := NewNetworkWriter(buffer)
 
-	nw.WriteByte(packet.Type)
-	nw.WriteByte(packet.Code)
+	nw.WriteUint8(packet.Type)
+	nw.WriteUint8(packet.Code)
 	nw.WriteUint16(0)
 	nw.WriteUint16(packet.Identifier)
 	nw.WriteUint16(packet.SequenceNumber)
@@ -57,8 +57,8 @@ func (packet IcmpPacket) Serialize6(buffer []byte) int {
 	length := 8 + len(packet.Payload)
 	nw := NewNetworkWriter(buffer)
 
-	nw.WriteByte(packet.Type)
-	nw.WriteByte(packet.Code)
+	nw.WriteUint8(packet.Type)
+	nw.WriteUint8(packet.Code)
 	nw.WriteUint16(0)
 	nw.WriteUint16(packet.Identifier)
 	nw.WriteUint16(packet.SequenceNumber)

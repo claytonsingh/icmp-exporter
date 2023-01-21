@@ -166,7 +166,6 @@ func (this *ICMPNative) transmit_thread() {
 	buf := make([]byte, 2048)
 	var id uint64
 	var SequenceNumber uint16
-	//var last_time uint64
 	for {
 		this.m_job_mutex.Lock()
 		jobs := this.m_jobs
@@ -176,7 +175,6 @@ func (this *ICMPNative) transmit_thread() {
 			continue
 		}
 
-		// interpacket_duration := time.Duration(this.m_pingrate*1000) * time.Millisecond / time.Duration(len(jobs))
 		interpacket_duration := time.Duration(float64(this.m_interval) / float64(len(jobs)))
 		if interpacket_duration < this.m_min_interval {
 			interpacket_duration = this.m_min_interval
