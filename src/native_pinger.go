@@ -32,21 +32,25 @@ type ICMPNative struct {
 	m_mutex           sync.RWMutex
 	m_started         bool
 	m_timeout         time.Duration
-	m_pingrate        float32
+	m_interval        time.Duration
 	m_identifier      uint16
 	m_timestamp_type  int
 	m_timestamp_flags int
-	m_interface       string
+	m_interface_4     string
+	m_interface_6     string
 	m_next_packet     time.Time
+	m_min_interval    time.Duration
 }
 
-func NewICMPNative(hardware bool, iface string) *ICMPNative {
+func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, interval int, max_pps int) *ICMPNative {
 	var this ICMPNative
 	this.m_identifier = (uint16)(os.Getpid())
 	this.m_nativePinger = orderedmap.NewOrderedMap[uint64, *nativePinger]()
-	this.m_timeout = time.Duration(3) * time.Second
-	this.m_pingrate = 2
-	this.m_interface = iface
+	this.m_timeout = time.Duration(timeout) * time.Millisecond
+	this.m_interval = time.Duration(interval) * time.Millisecond
+	this.m_min_interval = time.Duration(float64(time.Second) / float64(max_pps))
+	this.m_interface_4 = iface4
+	this.m_interface_6 = iface6
 
 	if hardware {
 		this.m_timestamp_flags = unix.SOF_TIMESTAMPING_RX_HARDWARE | unix.SOF_TIMESTAMPING_TX_HARDWARE | unix.SOF_TIMESTAMPING_RAW_HARDWARE
@@ -65,34 +69,46 @@ func (this *ICMPNative) Start() {
 	}
 	this.m_started = true
 
-	if socket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_ICMP); err != nil {
-		panic(err)
-	} else {
-		this.m_socket_4 = socket
+	if this.m_interface_4 != "" {
+		if socket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_ICMP); err != nil {
+			panic(err)
+		} else {
+			this.m_socket_4 = socket
+		}
+
+		if err := socket_set_ioctl_native(this.m_socket_4, this.m_interface_4, this.m_timestamp_flags); err < 0 {
+			panic(err)
+		}
+		if err := socket_set_flags(this.m_socket_4, this.m_timestamp_flags, 0, 0); err != nil {
+			panic(err)
+		}
 	}
 
-	if err := socket_set_ioctl_native(this.m_socket_4, this.m_interface, this.m_timestamp_flags); err < 0 {
-		panic(err)
-	}
-	socket_set_flags(this.m_socket_4, this.m_timestamp_flags, 0, 0)
+	if this.m_interface_6 != "" {
+		if socket, err := syscall.Socket(syscall.AF_INET6, syscall.SOCK_RAW, syscall.IPPROTO_ICMPV6); err != nil {
+			panic(err)
+		} else {
+			this.m_socket_6 = socket
+		}
 
-	if socket, err := syscall.Socket(syscall.AF_INET6, syscall.SOCK_RAW, syscall.IPPROTO_ICMPV6); err != nil {
-		panic(err)
-	} else {
-		this.m_socket_6 = socket
+		if err := socket_set_ioctl_native(this.m_socket_6, this.m_interface_6, this.m_timestamp_flags); err < 0 {
+			panic(err)
+		}
+		if err := socket_set_flags(this.m_socket_6, this.m_timestamp_flags, 0, 0); err != nil {
+			panic(err)
+		}
 	}
-
-	if err := socket_set_ioctl_native(this.m_socket_6, this.m_interface, this.m_timestamp_flags); err < 0 {
-		panic(err)
-	}
-	socket_set_flags(this.m_socket_6, this.m_timestamp_flags, 0, 0)
 
 	go this.timeout_thread()
 	go this.transmit_thread()
-	go this.receive_thread(this.m_socket_4)
-	go this.receive_thread(this.m_socket_6)
-	go this.error_thread(this.m_socket_4)
-	go this.error_thread(this.m_socket_6)
+	if this.m_socket_4 > 0 {
+		go this.receive_thread(this.m_socket_4)
+		go this.error_thread(this.m_socket_4)
+	}
+	if this.m_socket_6 > 0 {
+		go this.receive_thread(this.m_socket_6)
+		go this.error_thread(this.m_socket_6)
+	}
 }
 
 func (this *ICMPNative) SetJobs(jobs []*PingJob) {
@@ -160,7 +176,11 @@ func (this *ICMPNative) transmit_thread() {
 			continue
 		}
 
-		interpacket_duration := time.Duration(this.m_pingrate*1000) * time.Millisecond / time.Duration(len(jobs))
+		// interpacket_duration := time.Duration(this.m_pingrate*1000) * time.Millisecond / time.Duration(len(jobs))
+		interpacket_duration := time.Duration(float64(this.m_interval) / float64(len(jobs)))
+		if interpacket_duration < this.m_min_interval {
+			interpacket_duration = this.m_min_interval
+		}
 
 		for idx := range jobs {
 			id = id + 1
@@ -169,7 +189,7 @@ func (this *ICMPNative) transmit_thread() {
 
 			now := time.Now()
 			dt := this.m_next_packet.Sub(now)
-			// fmt.Println("send", dt, interpacket_duration)
+			fmt.Println("send", dt, interpacket_duration)
 			if dt > 0 {
 				time.Sleep(dt)
 			} else if dt < time.Second {
@@ -187,44 +207,48 @@ func (this *ICMPNative) transmit_thread() {
 			this.m_mutex.Unlock()
 
 			if IsIPv4(x.Job.IPAddress) {
-				x.packet = IcmpPacket{
-					Type:           8,
-					Code:           0,
-					Identifier:     this.m_identifier,
-					SequenceNumber: SequenceNumber,
-					Payload:        []byte("\000\000\000\000\000\000\000\000....Hello World................................."),
-					//                                              ........................................................
-				}
-				WriteUint64(x.packet.Payload, 0, id)
+				if this.m_socket_4 > 0 {
+					x.packet = IcmpPacket{
+						Type:           8,
+						Code:           0,
+						Identifier:     this.m_identifier,
+						SequenceNumber: SequenceNumber,
+						Payload:        []byte("\000\000\000\000\000\000\000\000....Hello World................................."),
+						//                                              ........................................................
+					}
+					WriteUint64(x.packet.Payload, 0, id)
 
-				n := x.packet.Serialize4(buf)
-				address := syscall.SockaddrInet4{Addr: Ipv4ToBytes(x.Job.IPAddress)}
-				if err := syscall.Sendto(this.m_socket_4, buf[:n], 0, &address); err != nil {
-					panic(err)
+					n := x.packet.Serialize4(buf)
+					address := syscall.SockaddrInet4{Addr: Ipv4ToBytes(x.Job.IPAddress)}
+					if err := syscall.Sendto(this.m_socket_4, buf[:n], 0, &address); err != nil {
+						panic(err)
+					}
 				}
 			} else {
-				x.packet = IcmpPacket{
-					Type:           128,
-					Code:           0,
-					Identifier:     this.m_identifier,
-					SequenceNumber: SequenceNumber,
-					Payload:        []byte("\000\000\000\000\000\000\000\000....Hello World................................."),
-					//                                              ........................................................
-				}
-				WriteUint64(x.packet.Payload, 0, id)
+				if this.m_socket_6 > 0 {
+					x.packet = IcmpPacket{
+						Type:           128,
+						Code:           0,
+						Identifier:     this.m_identifier,
+						SequenceNumber: SequenceNumber,
+						Payload:        []byte("\000\000\000\000\000\000\000\000....Hello World................................."),
+						//                                              ........................................................
+					}
+					WriteUint64(x.packet.Payload, 0, id)
 
-				n := x.packet.Serialize6(buf)
-				address := syscall.SockaddrInet6{Addr: Ipv6ToBytes(x.Job.IPAddress)}
-				if err := syscall.Sendto(this.m_socket_6, buf[:n], 0, &address); err != nil {
-					switch err {
-					case syscall.ENETUNREACH: // network is unreachable
-					case syscall.EHOSTUNREACH: // host is unreachable
-						x.m_mutex.Lock()
-						x.timestampSend = -1
-						x.m_mutex.Unlock()
-						break
-					default:
-						panic(err)
+					n := x.packet.Serialize6(buf)
+					address := syscall.SockaddrInet6{Addr: Ipv6ToBytes(x.Job.IPAddress)}
+					if err := syscall.Sendto(this.m_socket_6, buf[:n], 0, &address); err != nil {
+						switch err {
+						case syscall.ENETUNREACH: // network is unreachable
+						case syscall.EHOSTUNREACH: // host is unreachable
+							x.m_mutex.Lock()
+							x.timestampSend = -1
+							x.m_mutex.Unlock()
+							break
+						default:
+							panic(err)
+						}
 					}
 				}
 			}

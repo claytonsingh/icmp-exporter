@@ -67,22 +67,90 @@ var jobMap = sync.Map{}
 var signal = NewSignal()
 var resolver = nett.CacheResolver{TTL: 5 * time.Minute}
 
-func main() {
+type Settings struct {
+	iface4       string
+	iface6       string
+	use_hardware bool
+	listen_addr  string
+	timeout      int
+	interval     int
+	max_pps      int
+}
 
-	iface := flag.String("interface", "", "Interface to bind to")
-	use_hardware := flag.Bool("hard", false, "Use hardware timestamping")
-	listen_addr := flag.String("listen", ":9116", "ip and port to listen on, defaults to :9116")
+func parseArguments() Settings {
+	var errors []string
+	var settings Settings
+	defaults := Settings{
+		iface4:       "auto",
+		iface6:       "auto",
+		use_hardware: false,
+		listen_addr:  ":9116",
+		timeout:      3000,
+		interval:     2000,
+		max_pps:      10000,
+	}
+
+	i_will_be_good := flag.Bool("i-wont-be-evil", false, "Unlocks all other settings")
+	flag.StringVar(&settings.iface4, "interface4", defaults.iface4, "IPv4 interface to bind to.")
+	flag.StringVar(&settings.iface6, "interface6", defaults.iface6, "IPv6 interface to bind to.")
+	flag.BoolVar(&settings.use_hardware, "hard", defaults.use_hardware, "Use hardware timestamping.")
+	flag.StringVar(&settings.listen_addr, "listen", defaults.listen_addr, "ip and port to listen on.")
+	flag.IntVar(&settings.timeout, "timeout", defaults.timeout, "Timout in milliseconds.")
+	flag.IntVar(&settings.interval, "interval", defaults.interval, "Interval in milliseconds. Minimum 10. Must be unlocked.")
+	flag.IntVar(&settings.max_pps, "maxpps", defaults.max_pps, "Maximum packets per second. Minimum 1. Must be unlocked.")
 	flag.Parse()
 
-	if *iface == "" {
-		*iface, _ = GetDefaultRouteInterface()
+	if settings.iface4 == "auto" {
+		settings.iface4, _ = GetDefaultRouterInterface4()
 	}
-	if *iface == "" {
-		fmt.Println("interface is not set")
+	if settings.iface6 == "auto" {
+		settings.iface6, _ = GetDefaultRouterInterface6()
+	}
+
+	if settings.iface4 != "" {
+		fmt.Println("trying to bind ipv4 to: " + settings.iface4)
+	} else {
+		fmt.Println("ipv4 disabled; maybe set interface4?")
+	}
+	if settings.iface6 != "" {
+		fmt.Println("trying to bind ipv6 to: " + settings.iface6)
+	} else {
+		fmt.Println("ipv6 disabled; maybe set interface6?")
+	}
+
+	if settings.iface4 == "" && settings.iface6 == "" {
+		errors = append(errors, "interface4 and interface6 is not set")
+	}
+
+	if *i_will_be_good {
+		if settings.timeout < 10 {
+			errors = append(errors, "timeout must be greater then 9")
+		}
+		if settings.max_pps < 1 {
+			errors = append(errors, "max_pps must be greater then 0")
+		}
+		if settings.max_pps > 1000000 {
+			errors = append(errors, "max_pps must be less then 1000001")
+		}
+	} else {
+		settings.timeout = defaults.timeout
+		settings.max_pps = defaults.max_pps
+	}
+
+	if errors != nil {
+		for _, e := range errors {
+			fmt.Println("ERROR:", e)
+		}
 		os.Exit(1)
 	}
 
-	p := NewICMPNative(*use_hardware, *iface)
+	return settings
+}
+
+func main() {
+	settings := parseArguments()
+
+	p := NewICMPNative(settings.use_hardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.max_pps)
 	p.Start()
 
 	go func() {
@@ -112,7 +180,7 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/probe", ProbeHander)
-	http.ListenAndServe(*listen_addr, nil)
+	http.ListenAndServe(settings.listen_addr, nil)
 
 	select {}
 }
