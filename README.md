@@ -7,11 +7,21 @@ The major change from blackbox is that we use counters where possible and asynch
 ```
 Usage of prom-icmp:
   -hard
-        Use hardware timestamping
-  -interface string
-        Interface to bind to
+        Use hardware timestamping.
+  -i-wont-be-evil
+        Unlocks all other settings
+  -interface4 string
+        IPv4 interface to bind to. (default "auto")
+  -interface6 string
+        IPv6 interface to bind to. (default "auto")
+  -interval int
+        Interval in milliseconds. Minimum 10. Must be unlocked. (default 2000)
   -listen string
-        ip and port to listen on, defaults to :9116 (default ":9116")
+        ip and port to listen on. (default ":9116")
+  -maxpps int
+        Maximum packets per second. Minimum 1. Must be unlocked. (default 10000)
+  -timeout int
+        Timout in milliseconds. (default 3000)
 ```
 
 # URL parameters
