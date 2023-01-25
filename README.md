@@ -6,6 +6,8 @@ The major change from blackbox is that we use counters where possible and asynch
 # Command line
 ```
 Usage of prom-icmp:
+  -drop
+        Drop capabilities after starting.
   -hard
         Use hardware timestamping.
   -i-wont-be-evil

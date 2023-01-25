@@ -20,4 +20,6 @@ require (
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/stretchr/testify v1.8.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
+	kernel.org/pub/linux/libs/security/libcap/cap v1.2.66 // indirect
+	kernel.org/pub/linux/libs/security/libcap/psx v1.2.66 // indirect
 )
