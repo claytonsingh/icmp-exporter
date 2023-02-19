@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"sync"
 	"syscall"
@@ -45,6 +46,10 @@ type ICMPNative struct {
 func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, interval int, max_pps int) *ICMPNative {
 	var this ICMPNative
 	this.m_identifier = (uint16)(os.Getpid())
+	// If this is launched in a docker container then we are pid 1 so pick a random identifier
+	if this.m_identifier == 1 {
+		this.m_identifier = (uint16)(rand.Intn(65535))
+	}
 	this.m_nativePinger = orderedmap.NewOrderedMap[uint64, *nativePinger]()
 	this.m_timeout = time.Duration(timeout) * time.Millisecond
 	this.m_interval = time.Duration(interval) * time.Millisecond

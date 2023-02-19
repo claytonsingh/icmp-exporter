@@ -31,6 +31,15 @@ type PingJob struct {
 
 func (this *PingJob) AddSample(sample PingResult) {
 	this.Mutex.Lock()
+
+	// if we have recieved many packets then reset all the counters to prevent loss of percision
+	if this.Recv_Count >= 0x7F000000 {
+		this.Sent_Count = 0
+		this.Recv_Count = 0
+		this.Roundtrip_Total = 0
+		this.Roundtrip_Sq_Total = 0
+	}
+
 	this.Sent_Count += 1
 	this.ResultLimit += 1
 	if this.ResultLimit > this.Results.Size {

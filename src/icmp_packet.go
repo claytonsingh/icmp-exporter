@@ -9,17 +9,17 @@ type IcmpPacket struct {
 	Payload        []byte
 }
 
-func (packet IcmpPacket) Serialize4(buffer []byte) int {
+func (this IcmpPacket) Serialize4(buffer []byte) int {
 
-	length := 8 + len(packet.Payload)
+	length := 8 + len(this.Payload)
 	nw := NewNetworkWriter(buffer)
 
-	nw.WriteUint8(packet.Type)
-	nw.WriteUint8(packet.Code)
+	nw.WriteUint8(this.Type)
+	nw.WriteUint8(this.Code)
 	nw.WriteUint16(0)
-	nw.WriteUint16(packet.Identifier)
-	nw.WriteUint16(packet.SequenceNumber)
-	nw.WriteBytes(packet.Payload)
+	nw.WriteUint16(this.Identifier)
+	nw.WriteUint16(this.SequenceNumber)
+	nw.WriteBytes(this.Payload)
 
 	nw.Seek(2)
 	nw.WriteUint16(ComputeChecksum4(buffer, 0, length))
@@ -52,17 +52,17 @@ func ComputeChecksum4(packet []byte, index int, count int) uint16 {
 	return (uint16)(0xFFFF ^ xsum)
 }
 
-func (packet IcmpPacket) Serialize6(buffer []byte) int {
+func (this IcmpPacket) Serialize6(buffer []byte) int {
 
-	length := 8 + len(packet.Payload)
+	length := 8 + len(this.Payload)
 	nw := NewNetworkWriter(buffer)
 
-	nw.WriteUint8(packet.Type)
-	nw.WriteUint8(packet.Code)
+	nw.WriteUint8(this.Type)
+	nw.WriteUint8(this.Code)
 	nw.WriteUint16(0)
-	nw.WriteUint16(packet.Identifier)
-	nw.WriteUint16(packet.SequenceNumber)
-	nw.WriteBytes(packet.Payload)
+	nw.WriteUint16(this.Identifier)
+	nw.WriteUint16(this.SequenceNumber)
+	nw.WriteBytes(this.Payload)
 
 	//nw.Seek(2)
 	//nw.WriteUint16(ComputeChecksum6(buffer, 0, length))

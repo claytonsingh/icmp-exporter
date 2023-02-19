@@ -9,27 +9,27 @@ func NewNetworkWriter(buffer []byte) NetworkWriter {
 	return NetworkWriter{m_buffer: buffer}
 }
 
-func (nw *NetworkWriter) WriteUint8(value byte) {
-	nw.m_buffer[nw.m_index] = value
-	nw.m_index += 1
+func (this *NetworkWriter) WriteUint8(value byte) {
+	this.m_buffer[this.m_index] = value
+	this.m_index += 1
 }
 
-func (nw *NetworkWriter) WriteUint16(value uint16) {
-	nw.m_buffer[nw.m_index+0] = (byte)(value >> 8)
-	nw.m_buffer[nw.m_index+1] = (byte)(value >> 0)
-	nw.m_index += 2
+func (this *NetworkWriter) WriteUint16(value uint16) {
+	this.m_buffer[this.m_index+0] = (byte)(value >> 8)
+	this.m_buffer[this.m_index+1] = (byte)(value >> 0)
+	this.m_index += 2
 }
 
-func (nw *NetworkWriter) WriteUint64(value uint64) {
-	nw.m_buffer[nw.m_index+0] = (byte)(value >> 56)
-	nw.m_buffer[nw.m_index+1] = (byte)(value >> 48)
-	nw.m_buffer[nw.m_index+2] = (byte)(value >> 40)
-	nw.m_buffer[nw.m_index+3] = (byte)(value >> 32)
-	nw.m_buffer[nw.m_index+4] = (byte)(value >> 24)
-	nw.m_buffer[nw.m_index+5] = (byte)(value >> 16)
-	nw.m_buffer[nw.m_index+6] = (byte)(value >> 8)
-	nw.m_buffer[nw.m_index+7] = (byte)(value >> 0)
-	nw.m_index += 8
+func (this *NetworkWriter) WriteUint64(value uint64) {
+	this.m_buffer[this.m_index+0] = (byte)(value >> 56)
+	this.m_buffer[this.m_index+1] = (byte)(value >> 48)
+	this.m_buffer[this.m_index+2] = (byte)(value >> 40)
+	this.m_buffer[this.m_index+3] = (byte)(value >> 32)
+	this.m_buffer[this.m_index+4] = (byte)(value >> 24)
+	this.m_buffer[this.m_index+5] = (byte)(value >> 16)
+	this.m_buffer[this.m_index+6] = (byte)(value >> 8)
+	this.m_buffer[this.m_index+7] = (byte)(value >> 0)
+	this.m_index += 8
 }
 
 func WriteUint64(buffer []byte, index int, value uint64) {
@@ -43,11 +43,11 @@ func WriteUint64(buffer []byte, index int, value uint64) {
 	buffer[index+7] = (byte)(value >> 0)
 }
 
-func (nw *NetworkWriter) WriteBytes(value []byte) {
-	copy(nw.m_buffer[nw.m_index:], value)
-	nw.m_index += len(value)
+func (this *NetworkWriter) WriteBytes(value []byte) {
+	copy(this.m_buffer[this.m_index:], value)
+	this.m_index += len(value)
 }
 
-func (nw *NetworkWriter) Seek(offset int) {
-	nw.m_index = offset
+func (this *NetworkWriter) Seek(offset int) {
+	this.m_index = offset
 }
