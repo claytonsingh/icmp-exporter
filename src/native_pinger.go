@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"golang.org/x/net/bpf"
 	"golang.org/x/sys/unix"
 
 	"github.com/elliotchance/orderedmap/v2"
@@ -87,6 +88,36 @@ func (this *ICMPNative) Start() {
 		if err := socket_set_flags(this.m_socket_4, this.m_timestamp_flags, 0, 0); err != nil {
 			panic(err)
 		}
+
+		// filter := fmt.Sprintf(`
+		// (icmp[icmptype] == 0 && icmp[4:2] == %[1]d)
+		// `, this.m_identifier)
+		// if err := SetBerkeleyPacketFilter(this.m_socket_4, layers.LinkTypeIPv4, filter); err != nil {
+		// 	panic(err)
+		// }
+
+		if err := (BpfFilter{
+			// Check for ipv4
+			bpf.LoadAbsolute{Off: 9, Size: 1},
+			bpf.JumpIf{Cond: bpf.JumpNotEqual, Val: 1, SkipTrue: 8},
+			// Check ipv4 flags. Ignore if any are set
+			bpf.LoadAbsolute{Off: 6, Size: 2},
+			bpf.JumpIf{Cond: bpf.JumpBitsSet, Val: 0x1FFF, SkipTrue: 6},
+			// Save ipv4 header length into X
+			bpf.LoadMemShift{Off: 0},
+			// Load icmp "Type" and "Code" fields. Ignore if the type/code is not icmp echo response
+			bpf.LoadIndirect{Off: 0, Size: 2},
+			bpf.JumpIf{Cond: bpf.JumpNotEqual, Val: 0, SkipTrue: 3, SkipFalse: 0},
+			// Load icmp "identifier" field. Ignore if the identifier is not ours
+			bpf.LoadIndirect{Off: 4, Size: 2},
+			bpf.JumpIf{Cond: bpf.JumpNotEqual, Val: uint32(this.m_identifier), SkipTrue: 1},
+			// Verdict is "send up to 4k of the packet to userspace."
+			bpf.RetConstant{Val: 4096},
+			// Verdict is "ignore packet."
+			bpf.RetConstant{Val: 0},
+		}.ApplyTo(this.m_socket_4)); err != nil {
+			panic(err)
+		}
 	}
 
 	if this.m_interface_6 != "" {
@@ -100,6 +131,22 @@ func (this *ICMPNative) Start() {
 			panic(err)
 		}
 		if err := socket_set_flags(this.m_socket_6, this.m_timestamp_flags, 0, 0); err != nil {
+			panic(err)
+		}
+
+		// ipv6 is shit, so we only get the payload and not a whole packet. There is no way to generate a filter so hand roll it.
+		if err := (BpfFilter{
+			// Load "Type" and "Code" fields. Exit 0 if the type/code is not icmp echo response
+			bpf.LoadAbsolute{Off: 0, Size: 2},
+			bpf.JumpIf{Cond: bpf.JumpNotEqual, Val: 0x8100, SkipTrue: 3},
+			// Load "identifier" field. Exit 0 if the identifier is not ours
+			bpf.LoadAbsolute{Off: 4, Size: 2},
+			bpf.JumpIf{Cond: bpf.JumpNotEqual, Val: uint32(this.m_identifier), SkipTrue: 1},
+			// Verdict is "send up to 4k of the packet to userspace."
+			bpf.RetConstant{Val: 4096},
+			// Verdict is "ignore packet."
+			bpf.RetConstant{Val: 0},
+		}.ApplyTo(this.m_socket_6)); err != nil {
 			panic(err)
 		}
 	}
