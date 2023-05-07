@@ -12,6 +12,8 @@ package main
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include "linux/net_tstamp.h"
+#include <linux/ethtool.h>
+#include <linux/sockios.h>
 
 
 #ifndef SO_TIMESTAMPING
@@ -82,25 +84,36 @@ int recvpacket_v4(int32_t sock, uint8_t* name, uint8_t* data, uint32_t data_len,
 
 int socket_set_ioctl(int sock, char* ifname, int so_timestamping_flags)
 {
-	struct ifreq hwtstamp;
-	struct hwtstamp_config hwconfig, hwconfig_requested;
+	struct ifreq ifr;
 
-	memset(&hwtstamp, 0, sizeof(hwtstamp));
-	strncpy(hwtstamp.ifr_name, ifname, sizeof(hwtstamp.ifr_name));
+	memset(&ifr, 0, sizeof(ifr));
+	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	// Binding is not strictly nessary but is to make sure we only send out the correct interface
-	if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, &hwtstamp, sizeof(hwtstamp)) < 0) {
+	if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) < 0) {
 		return -1;
 	}
 
-	hwtstamp.ifr_data = (void *)&hwconfig;
+	struct ethtool_ts_info info;
+	info.cmd = ETHTOOL_GET_TS_INFO;
+	ifr.ifr_data = (void *)&info;
+	if (ioctl(sock, SIOCETHTOOL, &ifr) < 0) {
+		printf("Could not get capabilities for network interface %.*s\n", (int)sizeof(ifr.ifr_name), ifr.ifr_name);
+		return -3;
+	} else if ((info.so_timestamping & so_timestamping_flags) != so_timestamping_flags) {
+		printf("Network interface %.*s does not have required capabilities: %d != %d\n", (int)sizeof(ifr.ifr_name), ifr.ifr_name, info.so_timestamping, so_timestamping_flags);
+		return -4;
+	}
+
+	struct hwtstamp_config hwconfig, hwconfig_requested;
+	ifr.ifr_data = (void *)&hwconfig;
 	memset(&hwconfig, 0, sizeof(hwconfig));
 	hwconfig.tx_type   = (so_timestamping_flags & SOF_TIMESTAMPING_TX_HARDWARE) ? HWTSTAMP_TX_ON : HWTSTAMP_TX_OFF;
 	hwconfig.rx_filter = (so_timestamping_flags & SOF_TIMESTAMPING_RX_HARDWARE) ? HWTSTAMP_FILTER_ALL : HWTSTAMP_FILTER_NONE;
 
 	hwconfig_requested = hwconfig;
 
-	if (ioctl(sock, SIOCSHWTSTAMP, &hwtstamp) < 0)
+	if (ioctl(sock, SIOCSHWTSTAMP, &ifr) < 0)
 	{
 		if ((errno == EINVAL || errno == ENOTSUP) && hwconfig_requested.tx_type == HWTSTAMP_TX_OFF && hwconfig_requested.rx_filter == HWTSTAMP_FILTER_NONE)
 		{

@@ -192,9 +192,9 @@ func (this *ICMPNative) timeout_thread() {
 
 			pinger.m_mutex.Lock()
 			// if there was an error dont count the packet
-			if pinger.timestampSend != -1 && pinger.timestampRecv != -1 && (pinger.timestampRecv == 0 || pinger.timestampSend <= pinger.timestampRecv) {
+			if pinger.timestampSend > 0 && pinger.timestampRecv != -1 && (pinger.timestampRecv == 0 || pinger.timestampSend <= pinger.timestampRecv) {
 				// if both sent and recv are set then we count it as a success
-				if pinger.timestampSend > 0 && pinger.timestampRecv > 0 {
+				if pinger.timestampRecv > 0 {
 					pinger.Job.AddSample(PingResult{
 						Success:      true,
 						RountripTime: pinger.timestampRecv - pinger.timestampSend,
