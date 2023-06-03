@@ -21,71 +21,71 @@ type nativePinger struct {
 	timestampSend  int64
 	timestampRecv  int64
 	packet         IcmpPacket
-	Job            *PingJob
-	m_mutex        sync.Mutex
+	job            *PingJob
+	mutex          sync.Mutex
 }
 
 type ICMPNative struct {
-	m_socket_4        int
-	m_socket_6        int
-	m_nativePinger    *orderedmap.OrderedMap[uint64, *nativePinger]
-	m_jobs            []*PingJob
-	m_job_mutex       sync.Mutex
-	m_mutex           sync.RWMutex
-	m_started         bool
-	m_timeout         time.Duration
-	m_interval        time.Duration
-	m_identifier      uint16
-	m_timestamp_type  int
-	m_timestamp_flags int
-	m_interface_4     string
-	m_interface_6     string
-	m_next_packet     time.Time
-	m_min_interval    time.Duration
+	socket4        int
+	socket6        int
+	nativePinger   *orderedmap.OrderedMap[uint64, *nativePinger]
+	jobs           []*PingJob
+	jobMutex       sync.Mutex
+	mutex          sync.RWMutex
+	started        bool
+	timeout        time.Duration
+	interval       time.Duration
+	identifier     uint16
+	timestampType  int
+	timestampFlags int
+	interface4     string
+	interface6     string
+	nextPacket     time.Time
+	minInterval    time.Duration
 }
 
 func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, interval int, max_pps int) *ICMPNative {
 	var this ICMPNative
-	this.m_identifier = (uint16)(os.Getpid())
+	this.identifier = (uint16)(os.Getpid())
 	// If this is launched in a docker container then we are pid 1 so pick a random identifier
-	if this.m_identifier == 1 {
-		this.m_identifier = (uint16)(rand.Intn(65535))
+	if this.identifier == 1 {
+		this.identifier = (uint16)(rand.Intn(65535))
 	}
-	this.m_nativePinger = orderedmap.NewOrderedMap[uint64, *nativePinger]()
-	this.m_timeout = time.Duration(timeout) * time.Millisecond
-	this.m_interval = time.Duration(interval) * time.Millisecond
-	this.m_min_interval = time.Duration(float64(time.Second) / float64(max_pps))
-	this.m_interface_4 = iface4
-	this.m_interface_6 = iface6
+	this.nativePinger = orderedmap.NewOrderedMap[uint64, *nativePinger]()
+	this.timeout = time.Duration(timeout) * time.Millisecond
+	this.interval = time.Duration(interval) * time.Millisecond
+	this.minInterval = time.Duration(float64(time.Second) / float64(max_pps))
+	this.interface4 = iface4
+	this.interface6 = iface6
 
 	if hardware {
-		this.m_timestamp_flags = unix.SOF_TIMESTAMPING_RX_HARDWARE | unix.SOF_TIMESTAMPING_TX_HARDWARE | unix.SOF_TIMESTAMPING_RAW_HARDWARE
-		this.m_timestamp_type = 2
+		this.timestampFlags = unix.SOF_TIMESTAMPING_RX_HARDWARE | unix.SOF_TIMESTAMPING_TX_HARDWARE | unix.SOF_TIMESTAMPING_RAW_HARDWARE
+		this.timestampType = 2
 	} else {
-		this.m_timestamp_flags = unix.SOF_TIMESTAMPING_RX_SOFTWARE | unix.SOF_TIMESTAMPING_TX_SOFTWARE | unix.SOF_TIMESTAMPING_SOFTWARE
-		this.m_timestamp_type = 0
+		this.timestampFlags = unix.SOF_TIMESTAMPING_RX_SOFTWARE | unix.SOF_TIMESTAMPING_TX_SOFTWARE | unix.SOF_TIMESTAMPING_SOFTWARE
+		this.timestampType = 0
 	}
 
 	return &this
 }
 
 func (this *ICMPNative) Start() {
-	if this.m_started {
+	if this.started {
 		return
 	}
-	this.m_started = true
+	this.started = true
 
-	if this.m_interface_4 != "" {
+	if this.interface4 != "" {
 		if socket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_ICMP); err != nil {
 			panic(err)
 		} else {
-			this.m_socket_4 = socket
+			this.socket4 = socket
 		}
 
-		if err := socket_set_ioctl_native(this.m_socket_4, this.m_interface_4, this.m_timestamp_flags); err < 0 {
+		if err := socket_set_ioctl_native(this.socket4, this.interface4, this.timestampFlags); err < 0 {
 			panic(err)
 		}
-		if err := socket_set_flags(this.m_socket_4, this.m_timestamp_flags, 0, 0); err != nil {
+		if err := socket_set_flags(this.socket4, this.timestampFlags, 0, 0); err != nil {
 			panic(err)
 		}
 
@@ -110,27 +110,27 @@ func (this *ICMPNative) Start() {
 			bpf.JumpIf{Cond: bpf.JumpNotEqual, Val: 0, SkipTrue: 3, SkipFalse: 0},
 			// Load icmp "identifier" field. Ignore if the identifier is not ours
 			bpf.LoadIndirect{Off: 4, Size: 2},
-			bpf.JumpIf{Cond: bpf.JumpNotEqual, Val: uint32(this.m_identifier), SkipTrue: 1},
+			bpf.JumpIf{Cond: bpf.JumpNotEqual, Val: uint32(this.identifier), SkipTrue: 1},
 			// Verdict is "send up to 4k of the packet to userspace."
 			bpf.RetConstant{Val: 4096},
 			// Verdict is "ignore packet."
 			bpf.RetConstant{Val: 0},
-		}.ApplyTo(this.m_socket_4)); err != nil {
+		}.ApplyTo(this.socket4)); err != nil {
 			panic(err)
 		}
 	}
 
-	if this.m_interface_6 != "" {
+	if this.interface6 != "" {
 		if socket, err := syscall.Socket(syscall.AF_INET6, syscall.SOCK_RAW, syscall.IPPROTO_ICMPV6); err != nil {
 			panic(err)
 		} else {
-			this.m_socket_6 = socket
+			this.socket6 = socket
 		}
 
-		if err := socket_set_ioctl_native(this.m_socket_6, this.m_interface_6, this.m_timestamp_flags); err < 0 {
+		if err := socket_set_ioctl_native(this.socket6, this.interface6, this.timestampFlags); err < 0 {
 			panic(err)
 		}
-		if err := socket_set_flags(this.m_socket_6, this.m_timestamp_flags, 0, 0); err != nil {
+		if err := socket_set_flags(this.socket6, this.timestampFlags, 0, 0); err != nil {
 			panic(err)
 		}
 
@@ -141,126 +141,126 @@ func (this *ICMPNative) Start() {
 			bpf.JumpIf{Cond: bpf.JumpNotEqual, Val: 0x8100, SkipTrue: 3},
 			// Load "identifier" field. Exit 0 if the identifier is not ours
 			bpf.LoadAbsolute{Off: 4, Size: 2},
-			bpf.JumpIf{Cond: bpf.JumpNotEqual, Val: uint32(this.m_identifier), SkipTrue: 1},
+			bpf.JumpIf{Cond: bpf.JumpNotEqual, Val: uint32(this.identifier), SkipTrue: 1},
 			// Verdict is "send up to 4k of the packet to userspace."
 			bpf.RetConstant{Val: 4096},
 			// Verdict is "ignore packet."
 			bpf.RetConstant{Val: 0},
-		}.ApplyTo(this.m_socket_6)); err != nil {
+		}.ApplyTo(this.socket6)); err != nil {
 			panic(err)
 		}
 	}
 
-	go this.timeout_thread()
-	go this.transmit_thread()
-	if this.m_socket_4 > 0 {
-		go this.receive_thread(this.m_socket_4)
-		go this.error_thread(this.m_socket_4)
+	if this.socket4 > 0 {
+		go this.receiveThread(this.socket4)
+		go this.errorThread(this.socket4)
 	}
-	if this.m_socket_6 > 0 {
-		go this.receive_thread(this.m_socket_6)
-		go this.error_thread(this.m_socket_6)
+	if this.socket6 > 0 {
+		go this.receiveThread(this.socket6)
+		go this.errorThread(this.socket6)
 	}
+	go this.timeoutThread()
+	go this.transmitThread()
 }
 
 func (this *ICMPNative) SetJobs(jobs []*PingJob) {
-	this.m_job_mutex.Lock()
-	this.m_jobs = jobs
-	this.m_job_mutex.Unlock()
+	this.jobMutex.Lock()
+	this.jobs = jobs
+	this.jobMutex.Unlock()
 }
 
-func (this *ICMPNative) timeout_thread() {
+func (this *ICMPNative) timeoutThread() {
 	for {
-		this.m_mutex.RLock()
-		front := this.m_nativePinger.Front()
-		this.m_mutex.RUnlock()
+		this.mutex.RLock()
+		front := this.nativePinger.Front()
+		this.mutex.RUnlock()
 		// fmt.Println(this.m_nativePinger)
 		if front == nil {
-			time.Sleep(this.m_timeout)
+			time.Sleep(this.timeout)
 		} else {
 			pinger := front.Value
 
-			dt := pinger.timestampStart.Sub(time.Now()) + this.m_timeout
+			dt := pinger.timestampStart.Sub(time.Now()) + this.timeout
 			// fmt.Println("DT:", dt, &pinger.Job, front.Key, pinger.Job.IPAddress, pinger.Job.Sent_count)
 			if dt > 0 {
 				time.Sleep(dt)
 			}
 
-			this.m_mutex.Lock()
-			this.m_nativePinger.Delete(front.Key)
-			this.m_mutex.Unlock()
+			this.mutex.Lock()
+			this.nativePinger.Delete(front.Key)
+			this.mutex.Unlock()
 
-			pinger.m_mutex.Lock()
+			pinger.mutex.Lock()
 			// if there was an error dont count the packet
 			if pinger.timestampSend != -1 && pinger.timestampRecv != -1 && (pinger.timestampRecv == 0 || pinger.timestampSend <= pinger.timestampRecv) {
 				// if both sent and recv are set then we count it as a success
 				if pinger.timestampSend > 0 && pinger.timestampRecv > 0 {
-					pinger.Job.AddSample(PingResult{
+					pinger.job.AddSample(PingResult{
 						Success:      true,
 						RountripTime: pinger.timestampRecv - pinger.timestampSend,
 						Timestamp:    pinger.timestampStart,
 					})
 				} else {
-					pinger.Job.AddSample(PingResult{
+					pinger.job.AddSample(PingResult{
 						Success:      false,
 						RountripTime: 0,
 						Timestamp:    pinger.timestampStart,
 					})
 				}
 			}
-			pinger.m_mutex.Unlock()
+			pinger.mutex.Unlock()
 		}
 	}
 }
 
-func (this *ICMPNative) transmit_thread() {
+func (this *ICMPNative) transmitThread() {
 	buf := make([]byte, 2048)
 	var id uint64
 	var SequenceNumber uint16
 	for {
-		this.m_job_mutex.Lock()
-		jobs := this.m_jobs
-		this.m_job_mutex.Unlock()
+		this.jobMutex.Lock()
+		jobs := this.jobs
+		this.jobMutex.Unlock()
 		if len(jobs) == 0 {
 			time.Sleep(1 * time.Second)
 			continue
 		}
 
-		interpacket_duration := time.Duration(float64(this.m_interval) / float64(len(jobs)))
-		if interpacket_duration < this.m_min_interval {
-			interpacket_duration = this.m_min_interval
+		interpacketDuration := time.Duration(float64(this.interval) / float64(len(jobs)))
+		if interpacketDuration < this.minInterval {
+			interpacketDuration = this.minInterval
 		}
 
 		for idx := range jobs {
 			id = id + 1
 
-			this.m_next_packet = this.m_next_packet.Add(interpacket_duration)
+			this.nextPacket = this.nextPacket.Add(interpacketDuration)
 
 			now := time.Now()
-			dt := this.m_next_packet.Sub(now)
+			dt := this.nextPacket.Sub(now)
 			// fmt.Println("send", dt, interpacket_duration)
 			if dt > 0 {
 				time.Sleep(dt)
 			} else if dt < time.Second {
-				this.m_next_packet = now
+				this.nextPacket = now
 			} else if dt < time.Millisecond*-10 {
-				this.m_next_packet = now.Add(time.Millisecond * -10)
+				this.nextPacket = now.Add(time.Millisecond * -10)
 			}
 
 			var x nativePinger
 			x.timestampStart = time.Now()
-			x.Job = jobs[idx]
+			x.job = jobs[idx]
 
-			this.m_mutex.Lock()
-			this.m_nativePinger.Set(id, &x)
-			this.m_mutex.Unlock()
+			this.mutex.Lock()
+			this.nativePinger.Set(id, &x)
+			this.mutex.Unlock()
 
-			if IsIPv4(x.Job.IPAddress) {
-				if this.m_socket_4 > 0 {
+			if IsIPv4(x.job.IPAddress) {
+				if this.socket4 > 0 {
 					x.packet = IcmpPacket{
 						Type:           8,
 						Code:           0,
-						Identifier:     this.m_identifier,
+						Identifier:     this.identifier,
 						SequenceNumber: SequenceNumber,
 						Payload:        []byte("\000\000\000\000\000\000\000\000....Hello World................................."),
 						//                                              ........................................................
@@ -268,17 +268,17 @@ func (this *ICMPNative) transmit_thread() {
 					WriteUint64(x.packet.Payload, 0, id)
 
 					n := x.packet.Serialize4(buf)
-					address := syscall.SockaddrInet4{Addr: Ipv4ToBytes(x.Job.IPAddress)}
-					if err := syscall.Sendto(this.m_socket_4, buf[:n], 0, &address); err != nil {
+					address := syscall.SockaddrInet4{Addr: Ipv4ToBytes(x.job.IPAddress)}
+					if err := syscall.Sendto(this.socket4, buf[:n], 0, &address); err != nil {
 						panic(err)
 					}
 				}
 			} else {
-				if this.m_socket_6 > 0 {
+				if this.socket6 > 0 {
 					x.packet = IcmpPacket{
 						Type:           128,
 						Code:           0,
-						Identifier:     this.m_identifier,
+						Identifier:     this.identifier,
 						SequenceNumber: SequenceNumber,
 						Payload:        []byte("\000\000\000\000\000\000\000\000....Hello World................................."),
 						//                                              ........................................................
@@ -286,14 +286,14 @@ func (this *ICMPNative) transmit_thread() {
 					WriteUint64(x.packet.Payload, 0, id)
 
 					n := x.packet.Serialize6(buf)
-					address := syscall.SockaddrInet6{Addr: Ipv6ToBytes(x.Job.IPAddress)}
-					if err := syscall.Sendto(this.m_socket_6, buf[:n], 0, &address); err != nil {
+					address := syscall.SockaddrInet6{Addr: Ipv6ToBytes(x.job.IPAddress)}
+					if err := syscall.Sendto(this.socket6, buf[:n], 0, &address); err != nil {
 						switch err {
 						case syscall.ENETUNREACH: // network is unreachable
 						case syscall.EHOSTUNREACH: // host is unreachable
-							x.m_mutex.Lock()
+							x.mutex.Lock()
 							x.timestampSend = -1
-							x.m_mutex.Unlock()
+							x.mutex.Unlock()
 							break
 						default:
 							panic(err)
@@ -306,10 +306,10 @@ func (this *ICMPNative) transmit_thread() {
 	}
 }
 
-func (this *ICMPNative) receive_thread(sock int) {
+func (this *ICMPNative) receiveThread(sock int) {
 	data := make([]byte, syscall.Getpagesize())
 	for true {
-		ip, ndata, ts := recvpacket_v4(sock, data, 0, this.m_timestamp_type)
+		ip, ndata, ts := recvpacket_v4(sock, data, 0, this.timestampType)
 		if ndata < 0 {
 			panic(ndata)
 		} else if ip != nil {
@@ -330,16 +330,16 @@ func (this *ICMPNative) receive_thread(sock int) {
 							if len(ic4.Payload) >= 8 {
 								id := ReadUInt64(ic4.Payload, 0)
 
-								this.m_mutex.RLock()
-								np, ok := this.m_nativePinger.Get(id)
-								this.m_mutex.RUnlock()
+								this.mutex.RLock()
+								np, ok := this.nativePinger.Get(id)
+								this.mutex.RUnlock()
 
-								if ok && np.Job.IPAddress.Equal(ip4.SrcIP) && ic4.TypeCode == 0 && ic4.Seq == np.packet.SequenceNumber {
-									np.m_mutex.Lock()
+								if ok && np.job.IPAddress.Equal(ip4.SrcIP) && ic4.TypeCode == 0 && ic4.Seq == np.packet.SequenceNumber {
+									np.mutex.Lock()
 									if np.timestampRecv == 0 {
 										np.timestampRecv = ts
 									}
-									np.m_mutex.Unlock()
+									np.mutex.Unlock()
 								}
 							}
 						}
@@ -371,9 +371,9 @@ func (this *ICMPNative) receive_thread(sock int) {
 								id := ReadUInt64(ic6.Payload, 4)
 								Seq := ReadUInt16(ic6.Payload, 2)
 
-								this.m_mutex.RLock()
-								np, ok := this.m_nativePinger.Get(id)
-								this.m_mutex.RUnlock()
+								this.mutex.RLock()
+								np, ok := this.nativePinger.Get(id)
+								this.mutex.RUnlock()
 
 								//fmt.Println("rx YYY", ok, np, ts)
 								//fmt.Printf("tx2 data: %v - % X\n", ndata, data[:ndata])
@@ -381,12 +381,12 @@ func (this *ICMPNative) receive_thread(sock int) {
 								//fmt.Println("rx YYY", ok, ip6.DstIP, ic6.TypeCode == (128<<8), Seq == np.packet.SequenceNumber, ts)
 								//fmt.Printf("tx3 data: % X\n", ip6.Payload)
 
-								if ok && np.Job.IPAddress.Equal(ip) && ic6.TypeCode&0xFF00 == 0x8100 && Seq == np.packet.SequenceNumber {
-									np.m_mutex.Lock()
+								if ok && np.job.IPAddress.Equal(ip) && ic6.TypeCode&0xFF00 == 0x8100 && Seq == np.packet.SequenceNumber {
+									np.mutex.Lock()
 									if np.timestampRecv == 0 {
 										np.timestampRecv = ts
 									}
-									np.m_mutex.Unlock()
+									np.mutex.Unlock()
 								}
 							}
 						}
@@ -410,10 +410,10 @@ func (this *ICMPNative) receive_thread(sock int) {
 	}
 }
 
-func (this *ICMPNative) error_thread(sock int) {
+func (this *ICMPNative) errorThread(sock int) {
 	data := make([]byte, syscall.Getpagesize())
 	for true {
-		_, ndata, ts := recvpacket_v4(sock, data, unix.MSG_ERRQUEUE|unix.MSG_DONTWAIT, this.m_timestamp_type)
+		_, ndata, ts := recvpacket_v4(sock, data, unix.MSG_ERRQUEUE|unix.MSG_DONTWAIT, this.timestampType)
 		if ndata == -1 {
 			fds := []unix.PollFd{{Fd: int32(sock), Events: unix.POLLERR}}
 			unix.Poll(fds, 2100)
@@ -440,26 +440,26 @@ func (this *ICMPNative) error_thread(sock int) {
 					if layer == layers.LayerTypeICMPv4 {
 						id := ReadUInt64(ic4.Payload, 0)
 
-						this.m_mutex.RLock()
-						np, ok := this.m_nativePinger.Get(id)
-						this.m_mutex.RUnlock()
+						this.mutex.RLock()
+						np, ok := this.nativePinger.Get(id)
+						this.mutex.RUnlock()
 
 						// fmt.Println("rx YYY", ok, ip4.DstIP.Equal(np.Job.IPAddress), ic4.TypeCode == (8<<8), ic4.Seq == np.packet.SequenceNumber)
-						if ok && ip4.DstIP.Equal(np.Job.IPAddress) && ic4.TypeCode == (8<<8) && ic4.Seq == np.packet.SequenceNumber {
-							np.m_mutex.Lock()
+						if ok && ip4.DstIP.Equal(np.job.IPAddress) && ic4.TypeCode == (8<<8) && ic4.Seq == np.packet.SequenceNumber {
+							np.mutex.Lock()
 							if np.timestampSend == 0 {
 								np.timestampSend = ts
 							}
-							np.m_mutex.Unlock()
+							np.mutex.Unlock()
 						}
 						break
 					} else if layer == layers.LayerTypeICMPv6 {
 						id := ReadUInt64(ip6.Payload, 8)
 						Seq := ReadUInt16(ip6.Payload, 6)
 
-						this.m_mutex.RLock()
-						np, ok := this.m_nativePinger.Get(id)
-						this.m_mutex.RUnlock()
+						this.mutex.RLock()
+						np, ok := this.nativePinger.Get(id)
+						this.mutex.RUnlock()
 
 						//fmt.Println("rx YYY", ok, np, ts)
 						//fmt.Printf("tx2 data: %v - % X\n", ndata, data[:ndata])
@@ -467,12 +467,12 @@ func (this *ICMPNative) error_thread(sock int) {
 						//fmt.Println("rx YYY", ok, ip6.DstIP, ic6.TypeCode == (128<<8), Seq == np.packet.SequenceNumber, ts)
 						//fmt.Printf("tx3 data: % X\n", ip6.Payload)
 
-						if ok && ip6.DstIP.Equal(np.Job.IPAddress) && ic6.TypeCode&0xFF00 == 0x8000 && Seq == np.packet.SequenceNumber {
-							np.m_mutex.Lock()
+						if ok && ip6.DstIP.Equal(np.job.IPAddress) && ic6.TypeCode&0xFF00 == 0x8000 && Seq == np.packet.SequenceNumber {
+							np.mutex.Lock()
 							if np.timestampSend == 0 {
 								np.timestampSend = ts
 							}
-							np.m_mutex.Unlock()
+							np.mutex.Unlock()
 						}
 						break
 					}

@@ -18,29 +18,29 @@ import (
 )
 
 type PingJob struct {
-	IPAddress          net.IP
-	Sent_Count         int32
-	Recv_Count         int32
-	Roundtrip_Total    int64 // In microseconds
-	Roundtrip_Sq_Total int64 // In microseconds
-	Results            PDB
-	ResultLimit        int
-	LastAccess         time.Time
-	Mutex              sync.Mutex
+	IPAddress        net.IP
+	SentCount        int32
+	RecvCount        int32
+	RoundtripTotal   int64 // In microseconds
+	RoundtripSqTotal int64 // In microseconds
+	Results          DataBuff[PingResult]
+	ResultLimit      int
+	LastAccess       time.Time
+	Mutex            sync.Mutex
 }
 
 func (this *PingJob) AddSample(sample PingResult) {
 	this.Mutex.Lock()
 
 	// if we have sent many packets then reset all the counters to prevent loss of precision
-	if this.Sent_Count >= 0x7F000000 {
-		this.Sent_Count = 0
-		this.Recv_Count = 0
-		this.Roundtrip_Total = 0
-		this.Roundtrip_Sq_Total = 0
+	if this.SentCount >= 0x7F000000 {
+		this.SentCount = 0
+		this.RecvCount = 0
+		this.RoundtripTotal = 0
+		this.RoundtripSqTotal = 0
 	}
 
-	this.Sent_Count += 1
+	this.SentCount += 1
 	this.ResultLimit += 1
 	if this.ResultLimit > this.Results.Size {
 		this.ResultLimit = this.Results.Size
@@ -59,9 +59,9 @@ func (this *PingJob) AddSample(sample PingResult) {
 
 	this.Results.Append(sample)
 	if sample.Success {
-		this.Recv_Count += 1
-		this.Roundtrip_Total += sample.RountripTime
-		this.Roundtrip_Sq_Total += sample.RountripTime * sample.RountripTime
+		this.RecvCount += 1
+		this.RoundtripTotal += sample.RountripTime
+		this.RoundtripSqTotal += sample.RountripTime * sample.RountripTime
 	}
 	this.Mutex.Unlock()
 }
@@ -77,39 +77,39 @@ var signal = NewSignal()
 var resolver = nett.CacheResolver{TTL: 5 * time.Minute}
 
 type Settings struct {
-	iface4            string
-	iface6            string
-	use_hardware      bool
-	listen_addr       string
-	timeout           int
-	interval          int
-	max_pps           int
-	drop_capabilities bool
+	iface4           string
+	iface6           string
+	useHardware      bool
+	listenAddr       string
+	timeout          int
+	interval         int
+	maxpps           int
+	dropCapabilities bool
 }
 
 func parseArguments() Settings {
 	var errors []string
 	var settings Settings
 	defaults := Settings{
-		iface4:            "auto",
-		iface6:            "auto",
-		use_hardware:      false,
-		listen_addr:       ":9116",
-		timeout:           3000,
-		interval:          2000,
-		max_pps:           10000,
-		drop_capabilities: false,
+		iface4:           "auto",
+		iface6:           "auto",
+		useHardware:      false,
+		listenAddr:       ":9116",
+		timeout:          3000,
+		interval:         2000,
+		maxpps:           10000,
+		dropCapabilities: false,
 	}
 
 	i_will_be_good := flag.Bool("i-wont-be-evil", false, "Unlocks all other settings")
 	flag.StringVar(&settings.iface4, "interface4", defaults.iface4, "IPv4 interface to bind to.")
 	flag.StringVar(&settings.iface6, "interface6", defaults.iface6, "IPv6 interface to bind to.")
-	flag.BoolVar(&settings.use_hardware, "hard", defaults.use_hardware, "Use hardware timestamping.")
-	flag.BoolVar(&settings.drop_capabilities, "drop", defaults.drop_capabilities, "Drop capabilities after starting.")
-	flag.StringVar(&settings.listen_addr, "listen", defaults.listen_addr, "ip and port to listen on.")
+	flag.BoolVar(&settings.useHardware, "hard", defaults.useHardware, "Use hardware timestamping.")
+	flag.BoolVar(&settings.dropCapabilities, "drop", defaults.dropCapabilities, "Drop capabilities after starting.")
+	flag.StringVar(&settings.listenAddr, "listen", defaults.listenAddr, "ip and port to listen on.")
 	flag.IntVar(&settings.timeout, "timeout", defaults.timeout, "Timout in milliseconds.")
 	flag.IntVar(&settings.interval, "interval", defaults.interval, "Interval in milliseconds. Minimum 10. Must be unlocked.")
-	flag.IntVar(&settings.max_pps, "maxpps", defaults.max_pps, "Maximum packets per second. Minimum 1. Must be unlocked.")
+	flag.IntVar(&settings.maxpps, "maxpps", defaults.maxpps, "Maximum packets per second. Minimum 1. Must be unlocked.")
 	flag.Parse()
 
 	if settings.iface4 == "auto" {
@@ -138,15 +138,15 @@ func parseArguments() Settings {
 		if settings.timeout < 10 {
 			errors = append(errors, "timeout must be greater then 9")
 		}
-		if settings.max_pps < 1 {
+		if settings.maxpps < 1 {
 			errors = append(errors, "max_pps must be greater then 0")
 		}
-		if settings.max_pps > 1000000 {
+		if settings.maxpps > 1000000 {
 			errors = append(errors, "max_pps must be less then 1000001")
 		}
 	} else {
 		settings.timeout = defaults.timeout
-		settings.max_pps = defaults.max_pps
+		settings.maxpps = defaults.maxpps
 	}
 
 	if errors != nil {
@@ -162,7 +162,7 @@ func parseArguments() Settings {
 func main() {
 	settings := parseArguments()
 
-	p := NewICMPNative(settings.use_hardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.max_pps)
+	p := NewICMPNative(settings.useHardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.maxpps)
 	p.Start()
 
 	go func() {
@@ -186,13 +186,13 @@ func main() {
 	}()
 	go PruneMap()
 
-	ln, err := net.Listen("tcp", settings.listen_addr)
+	ln, err := net.Listen("tcp", settings.listenAddr)
 	if err != nil {
 		panic(err)
 	}
 
 	// Drop capabilities after binding
-	if settings.drop_capabilities {
+	if settings.dropCapabilities {
 		// Read and display the capabilities of the running process
 		c := cap.GetProc()
 		log.Println("this process has these caps:", c)
@@ -213,7 +213,9 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/probe", ProbeHander)
-	http.Serve(ln, nil)
+	if err := http.Serve(ln, nil); err != nil {
+		panic(err)
+	}
 
 	// select {}
 }

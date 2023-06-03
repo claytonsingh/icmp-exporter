@@ -29,6 +29,10 @@ func ReadUInt16(buffer []byte, index int) uint16 {
 	return val
 }
 
+func ReadUInt8(buffer []byte, index int) uint8 {
+	return uint8(buffer[index+0]) << (0 * 8)
+}
+
 // func main() {
 // 	data := make([]byte, 10)
 // 	for i := 0; i < 64; i++ {
