@@ -15,7 +15,7 @@ build-amd64:
   stage: build
   image: ubuntu:focal
   script:
-    - apt update && apt install -y ca-certificates curl build-essential libpcap-dev
+    - apt update && apt install -y ca-certificates curl build-essential
     - curl -sLo - https://go.dev/dl/go1.19.4.linux-amd64.tar.gz | tar zxf -
     - mv go /usr/local
     - export GOROOT=/usr/local/go
@@ -31,7 +31,7 @@ build-arm64:
   stage: build
   image: arm64v8/ubuntu:focal
   script:
-    - apt update && apt install -y ca-certificates curl build-essential libpcap-dev
+    - apt update && apt install -y ca-certificates curl build-essential
     - curl -sLo - https://go.dev/dl/go1.19.4.linux-arm64.tar.gz | tar zxf -
     - mv go /usr/local
     - export GOROOT=/usr/local/go
@@ -47,7 +47,7 @@ build-arm32:
   stage: build
   image: arm32v7/ubuntu:focal
   script:
-    - apt update && apt install -y ca-certificates curl build-essential libpcap-dev
+    - apt update && apt install -y ca-certificates curl build-essential
     - curl -sLo - https://go.dev/dl/go1.19.4.linux-armv6l.tar.gz | tar zxf -
     - mv go /usr/local
     - export GOROOT=/usr/local/go
