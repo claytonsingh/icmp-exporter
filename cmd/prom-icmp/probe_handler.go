@@ -32,7 +32,7 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 
 	var target string = ""
-	var ip_version string = "46"
+	var ipVersion string = "46"
 
 	if params.Has("target") {
 		target = params.Get("target")
@@ -43,16 +43,16 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	if params.Has("ip_version") {
 		switch params.Get("ip_version") {
 		case "4":
-			ip_version = "4"
+			ipVersion = "4"
 			break
 		case "6":
-			ip_version = "6"
+			ipVersion = "6"
 			break
 		case "46":
-			ip_version = "46"
+			ipVersion = "46"
 			break
 		case "64":
-			ip_version = "64"
+			ipVersion = "64"
 			break
 		}
 	}
@@ -76,13 +76,13 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// If client is requesting only ipv4 or ipv6
-		if ip_version == "4" {
+		if ipVersion == "4" {
 			addresses = Filter(addresses, IsIPv4)
-		} else if ip_version == "6" {
+		} else if ipVersion == "6" {
 			addresses = Filter(addresses, IsIPv6)
 		}
 
-		if ip_version == "46" {
+		if ipVersion == "46" {
 			// If requesting 46 then sort ipv4 first
 			sort.Slice(addresses, func(i int, j int) bool {
 				if IsIPv4(addresses[i]) && IsIPv6(addresses[j]) {
@@ -90,7 +90,7 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 				}
 				return bytes.Compare(addresses[i], addresses[j]) < 0
 			})
-		} else if ip_version == "64" {
+		} else if ipVersion == "64" {
 			// If requesting 64 then sort ipv6 first
 			sort.Slice(addresses, func(i int, j int) bool {
 				if IsIPv6(addresses[i]) && IsIPv4(addresses[j]) {
@@ -121,55 +121,55 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 
 	registry := prometheus.NewRegistry()
 
-	probeSentCount := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "probe_sent_count",
+	probeSentTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "icmp_probe_packets_sent_total",
 		Help: "How many icmp packets were sent to the target ip",
 	}, []string{"ip", "target"})
-	registry.MustRegister(probeSentCount)
+	registry.MustRegister(probeSentTotal)
 
-	probeRecvCount := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "probe_recv_count",
+	probeRecvTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "icmp_probe_packets_recv_total",
 		Help: "How many icmp packets were recieved from the target ip",
 	}, []string{"ip", "target"})
-	registry.MustRegister(probeRecvCount)
+	registry.MustRegister(probeRecvTotal)
 
 	probeLatencyTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "probe_latency_seconds_total",
+		Name: "icmp_probe_latency_seconds_total",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeLatencyTotal)
 
 	probeLatencySqTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "probe_latency_squared_seconds_total",
+		Name: "icmp_probe_latency_squared_seconds_total",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeLatencySqTotal)
 
 	probeLatency := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "probe_latency_seconds",
+		Name: "icmp_probe_latency_seconds",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeLatency)
 
 	probeDeviation := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "probe_standard_deviation_seconds",
+		Name: "icmp_probe_standard_deviation_seconds",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeDeviation)
 
 	probeLoss := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "probe_loss_ratio",
+		Name: "icmp_probe_loss_ratio",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeLoss)
 
 	probeSamples := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "probe_samples_count",
+		Name: "icmp_probe_samples_count",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeSamples)
 
-	job, new := GetJob(requestIp)
+	job, new := GetProbe(requestIp)
 	if new {
 		signal.Signal()
 	}
@@ -177,10 +177,10 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	labels := []string{job.IPAddress.String(), requestTarget}
 
 	job.Mutex.Lock()
-	probeSentCount.WithLabelValues(labels...).Add(float64(job.Sent_Count))
-	probeRecvCount.WithLabelValues(labels...).Add(float64(job.Recv_Count))
-	probeLatencyTotal.WithLabelValues(labels...).Add(float64(job.Roundtrip_Total) / 1000000.0)
-	probeLatencySqTotal.WithLabelValues(labels...).Add(float64(job.Roundtrip_Sq_Total) / (1000000.0 * 1000000.0))
+	probeSentTotal.WithLabelValues(labels...).Add(float64(job.SentCount))
+	probeRecvTotal.WithLabelValues(labels...).Add(float64(job.RecvCount))
+	probeLatencyTotal.WithLabelValues(labels...).Add(float64(job.RoundtripTotal) / 1000000.0)
+	probeLatencySqTotal.WithLabelValues(labels...).Add(float64(job.RoundtripSqTotal) / (1000000.0 * 1000000.0))
 
 	// Take a snapshot of the results and copy pointers into a new array
 	results := job.Results.Snapshot()

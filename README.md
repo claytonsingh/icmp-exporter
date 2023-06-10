@@ -54,3 +54,9 @@ scrape_configs:
     - targets:
       - example.com
 ```
+
+# Building
+```
+apt install libpcap-dev
+CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/prom-icmp-amd64 cmd/prom-icmp/*.go
+```

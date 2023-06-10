@@ -15,12 +15,12 @@ build-amd64:
   stage: build
   image: ubuntu:focal
   script:
-    - apt update && apt install -y ca-certificates curl build-essential libpcap-dev
+    - apt update && apt install -y ca-certificates curl build-essential
     - curl -sLo - https://go.dev/dl/go1.19.4.linux-amd64.tar.gz | tar zxf -
     - mv go /usr/local
     - export GOROOT=/usr/local/go
     - export PATH=$GOROOT/bin:$PATH
-    - CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/prom-icmp-amd64 src/*.go
+    - CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/prom-icmp-amd64 cmd/prom-icmp/*.go
   artifacts:
     paths:
       - bin/*
@@ -31,12 +31,12 @@ build-arm64:
   stage: build
   image: arm64v8/ubuntu:focal
   script:
-    - apt update && apt install -y ca-certificates curl build-essential libpcap-dev
+    - apt update && apt install -y ca-certificates curl build-essential
     - curl -sLo - https://go.dev/dl/go1.19.4.linux-arm64.tar.gz | tar zxf -
     - mv go /usr/local
     - export GOROOT=/usr/local/go
     - export PATH=$GOROOT/bin:$PATH
-    - CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -o bin/prom-icmp-arm64 src/*.go
+    - CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -o bin/prom-icmp-arm64 cmd/prom-icmp/*.go
   artifacts:
     paths:
       - bin/*
@@ -47,12 +47,12 @@ build-arm32:
   stage: build
   image: arm32v7/ubuntu:focal
   script:
-    - apt update && apt install -y ca-certificates curl build-essential libpcap-dev
+    - apt update && apt install -y ca-certificates curl build-essential
     - curl -sLo - https://go.dev/dl/go1.19.4.linux-armv6l.tar.gz | tar zxf -
     - mv go /usr/local
     - export GOROOT=/usr/local/go
     - export PATH=$GOROOT/bin:$PATH
-    - CGO_ENABLED=1 GOOS=linux GOARCH=arm go build -o bin/prom-icmp-arm32 src/*.go
+    - CGO_ENABLED=1 GOOS=linux GOARCH=arm go build -o bin/prom-icmp-arm32 cmd/prom-icmp/*.go
   artifacts:
     paths:
       - bin/*

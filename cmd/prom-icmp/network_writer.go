@@ -20,6 +20,14 @@ func (this *NetworkWriter) WriteUint16(value uint16) {
 	this.m_index += 2
 }
 
+func (this *NetworkWriter) WriteUint32(value uint32) {
+	this.m_buffer[this.m_index+0] = (byte)(value >> 24)
+	this.m_buffer[this.m_index+1] = (byte)(value >> 16)
+	this.m_buffer[this.m_index+2] = (byte)(value >> 8)
+	this.m_buffer[this.m_index+3] = (byte)(value >> 0)
+	this.m_index += 4
+}
+
 func (this *NetworkWriter) WriteUint64(value uint64) {
 	this.m_buffer[this.m_index+0] = (byte)(value >> 56)
 	this.m_buffer[this.m_index+1] = (byte)(value >> 48)

@@ -1,7 +1,5 @@
 package main
 
-type PDB = DataBuff[PingResult]
-
 type DataBuff[T any] struct {
 	Size     int
 	elements []T
@@ -37,6 +35,7 @@ func (this *DataBuff[T]) Insert(index int, item T) []T {
 	return this.elements
 }
 
+// This returns a slice, not a copy, so it is important not to mutate the data.
 func (this *DataBuff[T]) Snapshot() (items []T) {
 	items = this.elements[:]
 	return
