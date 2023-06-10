@@ -10,10 +10,29 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/net/bpf"
 	"golang.org/x/sys/unix"
+)
 
-	"github.com/elliotchance/orderedmap/v2"
+var (
+	promIcmpTxPackets = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "icmp_packets_sent_total",
+		Help: "The total number of transmitted packets",
+	})
+	promIcmpRxPackets = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "icmp_packets_recv_total",
+		Help: "The total number of received packets",
+	})
+	promIcmpErPackets = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "icmp_packets_error_total",
+		Help: "The total number of error packets",
+	})
+	promIcmpActiveProbes = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "icmp_active_probes",
+		Help: "The number of active probes",
+	})
 )
 
 type nativePinger struct {
@@ -21,17 +40,16 @@ type nativePinger struct {
 	timestampSend  int64
 	timestampRecv  int64
 	packet         IcmpPacket
-	job            *PingJob
+	probe          *PingProbe
 	mutex          sync.Mutex
 }
 
 type ICMPNative struct {
 	socket4        int
 	socket6        int
-	nativePinger   *orderedmap.OrderedMap[uint64, *nativePinger]
-	jobs           []*PingJob
-	jobMutex       sync.Mutex
-	mutex          sync.RWMutex
+	nativePinger   *SafeOrderedMap[uint64, *nativePinger]
+	probes         []*PingProbe
+	probeMutex     sync.Mutex
 	started        bool
 	timeout        time.Duration
 	interval       time.Duration
@@ -51,7 +69,7 @@ func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, int
 	if this.identifier == 1 {
 		this.identifier = (uint16)(rand.Intn(65535))
 	}
-	this.nativePinger = orderedmap.NewOrderedMap[uint64, *nativePinger]()
+	this.nativePinger = NewSafeOrderedMap[uint64, *nativePinger]()
 	this.timeout = time.Duration(timeout) * time.Millisecond
 	this.interval = time.Duration(interval) * time.Millisecond
 	this.minInterval = time.Duration(float64(time.Second) / float64(max_pps))
@@ -163,50 +181,48 @@ func (this *ICMPNative) Start() {
 	go this.transmitThread()
 }
 
-func (this *ICMPNative) SetJobs(jobs []*PingJob) {
-	this.jobMutex.Lock()
-	this.jobs = jobs
-	this.jobMutex.Unlock()
+func (this *ICMPNative) SetProbes(probes []*PingProbe) {
+	this.probeMutex.Lock()
+	this.probes = probes
+	this.probeMutex.Unlock()
 }
 
 func (this *ICMPNative) timeoutThread() {
 	for {
-		this.mutex.RLock()
-		front := this.nativePinger.Front()
-		this.mutex.RUnlock()
-		// fmt.Println(this.m_nativePinger)
-		if front == nil {
+		if key, pinger, ok := this.nativePinger.Front(); !ok {
 			time.Sleep(this.timeout)
 		} else {
-			pinger := front.Value
-
 			dt := pinger.timestampStart.Sub(time.Now()) + this.timeout
 			// fmt.Println("DT:", dt, &pinger.Job, front.Key, pinger.Job.IPAddress, pinger.Job.Sent_count)
 			if dt > 0 {
 				time.Sleep(dt)
 			}
 
-			this.mutex.Lock()
-			this.nativePinger.Delete(front.Key)
-			this.mutex.Unlock()
+			this.nativePinger.Delete(key)
 
 			pinger.mutex.Lock()
 			// if there was an error dont count the packet
 			if pinger.timestampSend != -1 && pinger.timestampRecv != -1 && (pinger.timestampRecv == 0 || pinger.timestampSend <= pinger.timestampRecv) {
+				// Increment sent packets counter
+				promIcmpTxPackets.Inc()
+
 				// if both sent and recv are set then we count it as a success
 				if pinger.timestampSend > 0 && pinger.timestampRecv > 0 {
-					pinger.job.AddSample(PingResult{
+					pinger.probe.AddSample(PingResult{
 						Success:      true,
 						RountripTime: pinger.timestampRecv - pinger.timestampSend,
 						Timestamp:    pinger.timestampStart,
 					})
+					promIcmpRxPackets.Inc()
 				} else {
-					pinger.job.AddSample(PingResult{
+					pinger.probe.AddSample(PingResult{
 						Success:      false,
 						RountripTime: 0,
 						Timestamp:    pinger.timestampStart,
 					})
 				}
+			} else {
+				promIcmpErPackets.Inc()
 			}
 			pinger.mutex.Unlock()
 		}
@@ -218,20 +234,22 @@ func (this *ICMPNative) transmitThread() {
 	var id uint64
 	var SequenceNumber uint16
 	for {
-		this.jobMutex.Lock()
-		jobs := this.jobs
-		this.jobMutex.Unlock()
-		if len(jobs) == 0 {
+		this.probeMutex.Lock()
+		probes := this.probes
+		this.probeMutex.Unlock()
+
+		promIcmpActiveProbes.Set(float64(len(probes)))
+		if len(probes) == 0 {
 			time.Sleep(1 * time.Second)
 			continue
 		}
 
-		interpacketDuration := time.Duration(float64(this.interval) / float64(len(jobs)))
+		interpacketDuration := time.Duration(float64(this.interval) / float64(len(probes)))
 		if interpacketDuration < this.minInterval {
 			interpacketDuration = this.minInterval
 		}
 
-		for idx := range jobs {
+		for idx := range probes {
 			id = id + 1
 
 			this.nextPacket = this.nextPacket.Add(interpacketDuration)
@@ -249,13 +267,11 @@ func (this *ICMPNative) transmitThread() {
 
 			var x nativePinger
 			x.timestampStart = time.Now()
-			x.job = jobs[idx]
+			x.probe = probes[idx]
 
-			this.mutex.Lock()
 			this.nativePinger.Set(id, &x)
-			this.mutex.Unlock()
 
-			if IsIPv4(x.job.IPAddress) {
+			if IsIPv4(x.probe.IPAddress) {
 				if this.socket4 > 0 {
 					x.packet = IcmpPacket{
 						Type:           8,
@@ -268,7 +284,7 @@ func (this *ICMPNative) transmitThread() {
 					WriteUint64(x.packet.Payload, 0, id)
 
 					n := x.packet.Serialize4(buf)
-					address := syscall.SockaddrInet4{Addr: Ipv4ToBytes(x.job.IPAddress)}
+					address := syscall.SockaddrInet4{Addr: Ipv4ToBytes(x.probe.IPAddress)}
 					if err := syscall.Sendto(this.socket4, buf[:n], 0, &address); err != nil {
 						panic(err)
 					}
@@ -286,7 +302,7 @@ func (this *ICMPNative) transmitThread() {
 					WriteUint64(x.packet.Payload, 0, id)
 
 					n := x.packet.Serialize6(buf)
-					address := syscall.SockaddrInet6{Addr: Ipv6ToBytes(x.job.IPAddress)}
+					address := syscall.SockaddrInet6{Addr: Ipv6ToBytes(x.probe.IPAddress)}
 					if err := syscall.Sendto(this.socket6, buf[:n], 0, &address); err != nil {
 						switch err {
 						case syscall.ENETUNREACH: // network is unreachable
@@ -307,6 +323,16 @@ func (this *ICMPNative) transmitThread() {
 }
 
 func (this *ICMPNative) receiveThread(sock int) {
+
+	var ip4 layers.IPv4
+	var ic4 layers.ICMPv4
+	parser4 := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ip4, &ic4)
+	parser4.IgnoreUnsupported = true
+
+	var ic6 layers.ICMPv6
+	parser6 := gopacket.NewDecodingLayerParser(layers.LayerTypeICMPv6, &ic6)
+	parser6.IgnoreUnsupported = true
+
 	data := make([]byte, syscall.Getpagesize())
 	for true {
 		ip, ndata, ts := recvpacket_v4(sock, data, 0, this.timestampType)
@@ -318,23 +344,16 @@ func (this *ICMPNative) receiveThread(sock int) {
 
 			if IsIPv4(ip) {
 				//var eth layers.Ethernet
-				var ip4 layers.IPv4
-				var ic4 layers.ICMPv4
-
-				parser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ip4, &ic4)
-				parser.IgnoreUnsupported = true
 				decoded := []gopacket.LayerType{}
-				if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
+				if err := parser4.DecodeLayers(data[:ndata], &decoded); err == nil {
 					for _, layer := range decoded {
 						if layer == layers.LayerTypeICMPv4 {
 							if len(ic4.Payload) >= 8 {
 								id := ReadUInt64(ic4.Payload, 0)
 
-								this.mutex.RLock()
 								np, ok := this.nativePinger.Get(id)
-								this.mutex.RUnlock()
 
-								if ok && np.job.IPAddress.Equal(ip4.SrcIP) && ic4.TypeCode == 0 && ic4.Seq == np.packet.SequenceNumber {
+								if ok && np.probe.IPAddress.Equal(ip4.SrcIP) && ic4.TypeCode == 0 && ic4.Seq == np.packet.SequenceNumber {
 									np.mutex.Lock()
 									if np.timestampRecv == 0 {
 										np.timestampRecv = ts
@@ -359,21 +378,15 @@ func (this *ICMPNative) receiveThread(sock int) {
 					fmt.Println("rx err ", err)
 				}
 			} else if IsIPv6(ip) {
-				var ic6 layers.ICMPv6
-
-				parser := gopacket.NewDecodingLayerParser(layers.LayerTypeICMPv6, &ic6)
-				parser.IgnoreUnsupported = true
 				decoded := []gopacket.LayerType{}
-				if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
+				if err := parser6.DecodeLayers(data[:ndata], &decoded); err == nil {
 					for _, layer := range decoded {
 						if layer == layers.LayerTypeICMPv6 {
 							if len(ic6.Payload) >= 12 {
 								id := ReadUInt64(ic6.Payload, 4)
 								Seq := ReadUInt16(ic6.Payload, 2)
 
-								this.mutex.RLock()
 								np, ok := this.nativePinger.Get(id)
-								this.mutex.RUnlock()
 
 								//fmt.Println("rx YYY", ok, np, ts)
 								//fmt.Printf("tx2 data: %v - % X\n", ndata, data[:ndata])
@@ -381,7 +394,7 @@ func (this *ICMPNative) receiveThread(sock int) {
 								//fmt.Println("rx YYY", ok, ip6.DstIP, ic6.TypeCode == (128<<8), Seq == np.packet.SequenceNumber, ts)
 								//fmt.Printf("tx3 data: % X\n", ip6.Payload)
 
-								if ok && np.job.IPAddress.Equal(ip) && ic6.TypeCode&0xFF00 == 0x8100 && Seq == np.packet.SequenceNumber {
+								if ok && np.probe.IPAddress.Equal(ip) && ic6.TypeCode&0xFF00 == 0x8100 && Seq == np.packet.SequenceNumber {
 									np.mutex.Lock()
 									if np.timestampRecv == 0 {
 										np.timestampRecv = ts
@@ -411,6 +424,15 @@ func (this *ICMPNative) receiveThread(sock int) {
 }
 
 func (this *ICMPNative) errorThread(sock int) {
+	var eth layers.Ethernet
+	var ip4 layers.IPv4
+	var ic4 layers.ICMPv4
+	var ip6 layers.IPv6
+	var ic6 layers.ICMPv6
+
+	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4, &ic4, &ip6, &ic6)
+	parser.IgnoreUnsupported = true
+
 	data := make([]byte, syscall.Getpagesize())
 	for true {
 		_, ndata, ts := recvpacket_v4(sock, data, unix.MSG_ERRQUEUE|unix.MSG_DONTWAIT, this.timestampType)
@@ -426,26 +448,16 @@ func (this *ICMPNative) errorThread(sock int) {
 			// fmt.Printf("tx data: %v - % X\n", ndata, data[:ndata])
 			// fmt.Printf("tx msg:  %v\n", ts)
 
-			var eth layers.Ethernet
-			var ip4 layers.IPv4
-			var ic4 layers.ICMPv4
-			var ip6 layers.IPv6
-			var ic6 layers.ICMPv6
-
-			parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4, &ic4, &ip6, &ic6)
-			parser.IgnoreUnsupported = true
 			decoded := []gopacket.LayerType{}
 			if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
 				for _, layer := range decoded {
 					if layer == layers.LayerTypeICMPv4 {
 						id := ReadUInt64(ic4.Payload, 0)
 
-						this.mutex.RLock()
 						np, ok := this.nativePinger.Get(id)
-						this.mutex.RUnlock()
 
 						// fmt.Println("rx YYY", ok, ip4.DstIP.Equal(np.Job.IPAddress), ic4.TypeCode == (8<<8), ic4.Seq == np.packet.SequenceNumber)
-						if ok && ip4.DstIP.Equal(np.job.IPAddress) && ic4.TypeCode == (8<<8) && ic4.Seq == np.packet.SequenceNumber {
+						if ok && ip4.DstIP.Equal(np.probe.IPAddress) && ic4.TypeCode == (8<<8) && ic4.Seq == np.packet.SequenceNumber {
 							np.mutex.Lock()
 							if np.timestampSend == 0 {
 								np.timestampSend = ts
@@ -457,9 +469,7 @@ func (this *ICMPNative) errorThread(sock int) {
 						id := ReadUInt64(ip6.Payload, 8)
 						Seq := ReadUInt16(ip6.Payload, 6)
 
-						this.mutex.RLock()
 						np, ok := this.nativePinger.Get(id)
-						this.mutex.RUnlock()
 
 						//fmt.Println("rx YYY", ok, np, ts)
 						//fmt.Printf("tx2 data: %v - % X\n", ndata, data[:ndata])
@@ -467,7 +477,7 @@ func (this *ICMPNative) errorThread(sock int) {
 						//fmt.Println("rx YYY", ok, ip6.DstIP, ic6.TypeCode == (128<<8), Seq == np.packet.SequenceNumber, ts)
 						//fmt.Printf("tx3 data: % X\n", ip6.Payload)
 
-						if ok && ip6.DstIP.Equal(np.job.IPAddress) && ic6.TypeCode&0xFF00 == 0x8000 && Seq == np.packet.SequenceNumber {
+						if ok && ip6.DstIP.Equal(np.probe.IPAddress) && ic6.TypeCode&0xFF00 == 0x8000 && Seq == np.packet.SequenceNumber {
 							np.mutex.Lock()
 							if np.timestampSend == 0 {
 								np.timestampSend = ts

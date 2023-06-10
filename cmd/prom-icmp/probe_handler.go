@@ -121,55 +121,55 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 
 	registry := prometheus.NewRegistry()
 
-	probeSentCount := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "probe_sent_count",
+	probeSentTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "icmp_probe_packets_sent_total",
 		Help: "How many icmp packets were sent to the target ip",
 	}, []string{"ip", "target"})
-	registry.MustRegister(probeSentCount)
+	registry.MustRegister(probeSentTotal)
 
-	probeRecvCount := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "probe_recv_count",
+	probeRecvTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "icmp_probe_packets_recv_total",
 		Help: "How many icmp packets were recieved from the target ip",
 	}, []string{"ip", "target"})
-	registry.MustRegister(probeRecvCount)
+	registry.MustRegister(probeRecvTotal)
 
 	probeLatencyTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "probe_latency_seconds_total",
+		Name: "icmp_probe_latency_seconds_total",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeLatencyTotal)
 
 	probeLatencySqTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "probe_latency_squared_seconds_total",
+		Name: "icmp_probe_latency_squared_seconds_total",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeLatencySqTotal)
 
 	probeLatency := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "probe_latency_seconds",
+		Name: "icmp_probe_latency_seconds",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeLatency)
 
 	probeDeviation := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "probe_standard_deviation_seconds",
+		Name: "icmp_probe_standard_deviation_seconds",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeDeviation)
 
 	probeLoss := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "probe_loss_ratio",
+		Name: "icmp_probe_loss_ratio",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeLoss)
 
 	probeSamples := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "probe_samples_count",
+		Name: "icmp_probe_samples_count",
 		Help: "",
 	}, []string{"ip", "target"})
 	registry.MustRegister(probeSamples)
 
-	job, new := GetJob(requestIp)
+	job, new := GetProbe(requestIp)
 	if new {
 		signal.Signal()
 	}
@@ -177,8 +177,8 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	labels := []string{job.IPAddress.String(), requestTarget}
 
 	job.Mutex.Lock()
-	probeSentCount.WithLabelValues(labels...).Add(float64(job.SentCount))
-	probeRecvCount.WithLabelValues(labels...).Add(float64(job.RecvCount))
+	probeSentTotal.WithLabelValues(labels...).Add(float64(job.SentCount))
+	probeRecvTotal.WithLabelValues(labels...).Add(float64(job.RecvCount))
 	probeLatencyTotal.WithLabelValues(labels...).Add(float64(job.RoundtripTotal) / 1000000.0)
 	probeLatencySqTotal.WithLabelValues(labels...).Add(float64(job.RoundtripSqTotal) / (1000000.0 * 1000000.0))
 

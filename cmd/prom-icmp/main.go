@@ -13,11 +13,12 @@ import (
 	"time"
 
 	"github.com/abursavich/nett"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"kernel.org/pub/linux/libs/security/libcap/cap"
 )
 
-type PingJob struct {
+type PingProbe struct {
 	IPAddress        net.IP
 	SentCount        int32
 	RecvCount        int32
@@ -29,7 +30,7 @@ type PingJob struct {
 	Mutex            sync.Mutex
 }
 
-func (this *PingJob) AddSample(sample PingResult) {
+func (this *PingProbe) AddSample(sample PingResult) {
 	this.Mutex.Lock()
 
 	// if we have sent many packets then reset all the counters to prevent loss of precision
@@ -72,7 +73,7 @@ type PingResult struct {
 	Timestamp    time.Time
 }
 
-var jobMap = sync.Map{}
+var probeMap = sync.Map{}
 var signal = NewSignal()
 var resolver = nett.CacheResolver{TTL: 5 * time.Minute}
 
@@ -169,9 +170,9 @@ func main() {
 		Wait := signal.GetWaiter(true)
 		for {
 			Wait()
-			r := make([]*PingJob, 0)
-			jobMap.Range(func(key any, value any) bool {
-				if v, ok := value.(*PingJob); ok {
+			r := make([]*PingProbe, 0)
+			probeMap.Range(func(key any, value any) bool {
+				if v, ok := value.(*PingProbe); ok {
 					r = append(r, v)
 				}
 				return true
@@ -179,8 +180,7 @@ func main() {
 			sort.Slice(r, func(i int, j int) bool {
 				return bytes.Compare(r[i].IPAddress, r[j].IPAddress) < 0
 			})
-			fmt.Println("Updated Job List", len(r))
-			p.SetJobs(r)
+			p.SetProbes(r)
 			time.Sleep(1 * time.Second)
 		}
 	}()
@@ -211,30 +211,31 @@ func main() {
 		}
 	}
 
-	http.Handle("/metrics", promhttp.Handler())
-	http.HandleFunc("/probe", ProbeHander)
-	if err := http.Serve(ln, nil); err != nil {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{}))
+	mux.Handle("/probe", http.HandlerFunc(ProbeHander))
+	if err := http.Serve(ln, PromtheusMiddlewareHandler(mux)); err != nil {
 		panic(err)
 	}
 
 	// select {}
 }
 
-func GetJob(ip net.IP) (*PingJob, bool) {
+func GetProbe(ip net.IP) (*PingProbe, bool) {
 	var j [16]byte
 	ip = ip.To16()
 	copy(j[:], ip[:])
 	now := time.Now()
-	if temp, ok := jobMap.Load(j); ok {
-		val := temp.(*PingJob)
+	if temp, ok := probeMap.Load(j); ok {
+		val := temp.(*PingProbe)
 		val.Mutex.Lock()
 		val.LastAccess = now
 		val.Mutex.Unlock()
 		return val, false
 	} else {
-		new := &PingJob{IPAddress: j[:], Results: NewDataBuff[PingResult](250), LastAccess: now}
-		temp, _ := jobMap.LoadOrStore(j, new)
-		val := temp.(*PingJob)
+		new := &PingProbe{IPAddress: j[:], Results: NewDataBuff[PingResult](250), LastAccess: now}
+		temp, _ := probeMap.LoadOrStore(j, new)
+		val := temp.(*PingProbe)
 		if val == new {
 			signal.Signal()
 		} else {
@@ -251,17 +252,17 @@ func PruneMap() {
 		time.Sleep(1 * time.Second)
 		expire := time.Now().Add(time.Duration(-10 * 60 * time.Second))
 		doRebuild := false
-		jobMap.Range(func(key any, value any) bool {
-			if job, ok := value.(*PingJob); ok {
+		probeMap.Range(func(key any, value any) bool {
+			if probe, ok := value.(*PingProbe); ok {
 				// fmt.Println(key, expire.After(job.LastAccess), expire.Sub(job.LastAccess))
 				remove := false
-				job.Mutex.Lock()
-				if expire.After(job.LastAccess) {
+				probe.Mutex.Lock()
+				if expire.After(probe.LastAccess) {
 					remove = true
 				}
-				job.Mutex.Unlock()
+				probe.Mutex.Unlock()
 				if remove {
-					jobMap.Delete(key)
+					probeMap.Delete(key)
 					doRebuild = true
 				}
 			}
