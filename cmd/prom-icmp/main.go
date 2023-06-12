@@ -195,7 +195,7 @@ func main() {
 	if settings.dropCapabilities {
 		// Read and display the capabilities of the running process
 		c := cap.GetProc()
-		log.Println("this process has these caps:", c)
+		log.Println("process started with caps:", c)
 
 		// Drop any privilege a process might have (including for root,
 		// but note root 'owns' a lot of system files so a cap-limited
@@ -209,6 +209,8 @@ func main() {
 		if cf, _ := now.Cf(empty); cf != 0 {
 			log.Fatalf("failed to fully drop privilege: have=%q, wanted=%q", now, empty)
 		}
+
+		log.Println("successfully dropped all caps")
 	}
 
 	mux := http.NewServeMux()
