@@ -20,7 +20,7 @@ build-amd64:
     - mv go /usr/local
     - export GOROOT=/usr/local/go
     - export PATH=$GOROOT/bin:$PATH
-    - flags="-X main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)"
+    - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
     - CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/prom-icmp-amd64 -ldflags="${flags}" cmd/prom-icmp/*.go
   artifacts:
     paths:
@@ -37,7 +37,7 @@ build-arm64:
     - mv go /usr/local
     - export GOROOT=/usr/local/go
     - export PATH=$GOROOT/bin:$PATH
-    - flags="-X main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)"
+    - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
     - CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -o bin/prom-icmp-arm64 -ldflags="${flags}" cmd/prom-icmp/*.go
   artifacts:
     paths:
@@ -54,7 +54,7 @@ build-arm32:
     - mv go /usr/local
     - export GOROOT=/usr/local/go
     - export PATH=$GOROOT/bin:$PATH
-    - flags="-X main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)"
+    - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
     - CGO_ENABLED=1 GOOS=linux GOARCH=arm go build -o bin/prom-icmp-arm32 -ldflags="${flags}" cmd/prom-icmp/*.go
   artifacts:
     paths:
