@@ -73,6 +73,7 @@ type PingResult struct {
 	Timestamp    time.Time
 }
 
+var versionString = "unknown"
 var probeMap = sync.Map{}
 
 var signal = syncsignal.NewSignal()
@@ -162,6 +163,7 @@ func parseArguments() Settings {
 }
 
 func main() {
+	log.Println("prom-ping version: ", versionString)
 	settings := parseArguments()
 
 	p := NewICMPNative(settings.useHardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.maxpps)
