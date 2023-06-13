@@ -126,8 +126,9 @@ int socket_set_ioctl(int sock, char* ifname, int so_timestamping_flags)
 	}
 
 	printf("SIOCSHWTSTAMP: tx_type %d requested, got %d; rx_filter %d requested, got %d\n",
-	hwconfig_requested.tx_type, hwconfig.tx_type,
-	hwconfig_requested.rx_filter, hwconfig.rx_filter);
+		hwconfig_requested.tx_type, hwconfig.tx_type,
+		hwconfig_requested.rx_filter, hwconfig.rx_filter
+	);
 
 	return 1;
 }

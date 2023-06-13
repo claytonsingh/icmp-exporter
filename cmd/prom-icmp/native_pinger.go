@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"sync"
@@ -548,7 +549,7 @@ func socket_set_flags(fd int, so_timestamping_flags int, so_timestamp int, so_ti
 		if val, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_TIMESTAMP); err != nil {
 			panic(err)
 		} else {
-			fmt.Printf("SO_TIMESTAMP:    %v %v\n", val, 1)
+			log.Printf("SO_TIMESTAMP:    %v %v\n", val, 1)
 		}
 	}
 
@@ -560,7 +561,7 @@ func socket_set_flags(fd int, so_timestamping_flags int, so_timestamp int, so_ti
 		if val, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_TIMESTAMPNS); err != nil {
 			panic(err)
 		} else {
-			fmt.Printf("SO_TIMESTAMPNS:  %v %v\n", val, 1)
+			log.Printf("SO_TIMESTAMPNS:  %v %v\n", val, 1)
 		}
 	}
 
@@ -572,7 +573,7 @@ func socket_set_flags(fd int, so_timestamping_flags int, so_timestamp int, so_ti
 		if val, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_TIMESTAMPING); err != nil {
 			panic(err)
 		} else {
-			fmt.Printf("SO_TIMESTAMPING: %v %v\n", val, so_timestamping_flags)
+			log.Printf("SO_TIMESTAMPING: %v %v\n", val, so_timestamping_flags)
 		}
 	}
 
@@ -584,7 +585,7 @@ func socket_set_flags(fd int, so_timestamping_flags int, so_timestamp int, so_ti
 		if val, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.IPV6_V6ONLY); err != nil {
 			panic(err)
 		} else {
-			fmt.Printf("IPV6_V6ONLY: %v %v\n", val, 0)
+			log.Printf("IPV6_V6ONLY: %v %v\n", val, 0)
 		}
 	}
 

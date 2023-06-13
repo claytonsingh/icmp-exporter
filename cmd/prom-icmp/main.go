@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/abursavich/nett"
+	"github.com/claytonsingh/syncsignal"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"kernel.org/pub/linux/libs/security/libcap/cap"
@@ -74,7 +74,8 @@ type PingResult struct {
 }
 
 var probeMap = sync.Map{}
-var signal = NewSignal()
+
+var signal = syncsignal.NewSignal()
 var resolver = nett.CacheResolver{TTL: 5 * time.Minute}
 
 type Settings struct {
@@ -121,14 +122,14 @@ func parseArguments() Settings {
 	}
 
 	if settings.iface4 != "" {
-		fmt.Println("trying to bind ipv4 to: " + settings.iface4)
+		log.Println("trying to bind ipv4 to: " + settings.iface4)
 	} else {
-		fmt.Println("ipv4 disabled; maybe set interface4?")
+		log.Println("ipv4 disabled; maybe set interface4?")
 	}
 	if settings.iface6 != "" {
-		fmt.Println("trying to bind ipv6 to: " + settings.iface6)
+		log.Println("trying to bind ipv6 to: " + settings.iface6)
 	} else {
-		fmt.Println("ipv6 disabled; maybe set interface6?")
+		log.Println("ipv6 disabled; maybe set interface6?")
 	}
 
 	if settings.iface4 == "" && settings.iface6 == "" {
@@ -152,7 +153,7 @@ func parseArguments() Settings {
 
 	if errors != nil {
 		for _, e := range errors {
-			fmt.Println("ERROR:", e)
+			log.Println("ERROR:", e)
 		}
 		os.Exit(1)
 	}
@@ -256,7 +257,7 @@ func PruneMap() {
 		doRebuild := false
 		probeMap.Range(func(key any, value any) bool {
 			if probe, ok := value.(*PingProbe); ok {
-				// fmt.Println(key, expire.After(job.LastAccess), expire.Sub(job.LastAccess))
+				// log.Println(key, expire.After(job.LastAccess), expire.Sub(job.LastAccess))
 				remove := false
 				probe.Mutex.Lock()
 				if expire.After(probe.LastAccess) {

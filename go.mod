@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/abursavich/nett v0.0.0-20150117192851-f31118c7aeb9
+	github.com/claytonsingh/syncsignal v0.1.0
 	github.com/elliotchance/orderedmap/v2 v2.2.0
 	github.com/google/gopacket v1.1.19
 	github.com/prometheus/client_golang v1.13.0
