@@ -39,25 +39,27 @@ func PromtheusMiddlewareHandler(h http.Handler) http.Handler {
 		// Measure http request
 		start := time.Now()
 		promHttpRequestsInflight.Inc()
+		defer func() {
+			promHttpRequestsInflight.Dec()
+			duration := time.Since(start)
+
+			// If return status is 404 then dont return a path to prevent high cardinality metrics
+			path := ""
+			if wp.statusCode != 404 {
+				path = r.URL.Path
+			}
+
+			statusCode := strconv.Itoa(wp.statusCode)
+
+			method := strings.ToLower(r.Method)
+			if _, ok := promHttpRequestMethods[method]; !ok {
+				method = "unknown"
+			}
+
+			promHttpRequestDurHistogram.WithLabelValues(path, method, statusCode).Observe(duration.Seconds())
+			promHttpResponseSizeHistogram.WithLabelValues(path, method, statusCode).Observe(float64(wp.bytesWritten))
+		}()
 		h.ServeHTTP(wp, r)
-		promHttpRequestsInflight.Dec()
-		duration := time.Since(start)
-
-		// If return status is 404 then dont return a path to prevent high cardinality metrics
-		path := ""
-		if wp.statusCode != 404 {
-			path = r.URL.Path
-		}
-
-		statusCode := strconv.Itoa(wp.statusCode)
-
-		method := strings.ToLower(r.Method)
-		if _, ok := promHttpRequestMethods[method]; !ok {
-			method = "unknown"
-		}
-
-		promHttpRequestDurHistogram.WithLabelValues(path, method, statusCode).Observe(duration.Seconds())
-		promHttpResponseSizeHistogram.WithLabelValues(path, method, statusCode).Observe(float64(wp.bytesWritten))
 	})
 }
 
