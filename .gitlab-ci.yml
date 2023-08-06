@@ -11,7 +11,7 @@ stages:
   - build
 
 build-amd64:
-  tags: [docker]
+  tags: [docker, multiarch]
   stage: build
   image: ubuntu:focal
   script:
@@ -28,7 +28,7 @@ build-amd64:
     expire_in: 1 week
 
 build-arm64:
-  tags: [docker]
+  tags: [docker, multiarch]
   stage: build
   image: arm64v8/ubuntu:focal
   script:
@@ -45,7 +45,7 @@ build-arm64:
     expire_in: 1 week
 
 build-arm32:
-  tags: [docker]
+  tags: [docker, multiarch]
   stage: build
   image: arm32v7/ubuntu:focal
   script:
