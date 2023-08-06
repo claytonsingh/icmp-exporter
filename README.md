@@ -1,5 +1,5 @@
 # What is icmp-exporter?
-ICMP exporter asynchronously sends pings to probe endpoints allowing the detection of path issues.
+ICMP exporter for [prometheus](https://prometheus.io) that asynchronously sends pings to probe endpoints allowing the detection of path issues.
 
 Leveraging hardware timestamping features provided by the network card, uncertainty accumulated by thread scheduling and the kernel is eliminated, allowing timestamps to the nearest microsecond.
 
@@ -56,6 +56,43 @@ scrape_configs:
     - targets:
       - example.com
 ```
+
+# Network card support
+This software requires some network card features here is how to check if your network interface is supported.
+
+- Hardware timestamping requires: `SOF_TIMESTAMPING_TX_HARDWARE`, `SOF_TIMESTAMPING_RX_HARDWARE`, `HWTSTAMP_TX_ON`, and `HWTSTAMP_FILTER_ALL`
+- Software timestamping requires: `SOF_TIMESTAMPING_TX_SOFTWARE`, and `SOF_TIMESTAMPING_RX_SOFTWARE`
+
+```
+# ethtool -T ens16
+Time stamping parameters for ens16:
+Capabilities:
+        hardware-transmit     (SOF_TIMESTAMPING_TX_HARDWARE)
+        software-transmit     (SOF_TIMESTAMPING_TX_SOFTWARE)
+        hardware-receive      (SOF_TIMESTAMPING_RX_HARDWARE)
+        software-receive      (SOF_TIMESTAMPING_RX_SOFTWARE)
+        software-system-clock (SOF_TIMESTAMPING_SOFTWARE)
+        hardware-raw-clock    (SOF_TIMESTAMPING_RAW_HARDWARE)
+PTP Hardware Clock: 0
+Hardware Transmit Timestamp Modes:
+        off                   (HWTSTAMP_TX_OFF)
+        on                    (HWTSTAMP_TX_ON)
+Hardware Receive Filter Modes:
+        none                  (HWTSTAMP_FILTER_NONE)
+        all                   (HWTSTAMP_FILTER_ALL)
+```
+
+## Known network cards
+| Card/Chipset        | Status Software    | Status Hardware    | Notes
+|---------------------|--------------------|--------------------|--------
+| Intel X550          | :heavy_check_mark: | :heavy_check_mark: | Tested
+| Intel e1000         | :heavy_check_mark: | :x:                | Tested
+| KVM Virtio          | :heavy_check_mark: | :x:                | Tested
+| Vmware vmxnet3      | :x:                | :x:                | Needs driver support, use e1000
+| Mellanox connectx-3 | :grey_question:    | :grey_question:    | Should work, not tested
+| Mellanox connectx-4 | :grey_question:    | :grey_question:    | Should work, not tested
+| Mellanox connectx-5 | :grey_question:    | :grey_question:    | Should work, not tested
+| Mellanox connectx-6 | :grey_question:    | :grey_question:    | Should work, not tested
 
 # Building
 Assuming you have golang setup

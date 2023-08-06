@@ -279,7 +279,7 @@ func (this *ICMPNative) transmitThread() {
 						Code:           0,
 						Identifier:     this.identifier,
 						SequenceNumber: SequenceNumber,
-						Payload:        []byte("\000\000\000\000\000\000\000\000....Hello World................................."),
+						Payload:        []byte("\000\000\000\000\000\000\000\000....github.com/claytonsingh/icmp-exporter......."),
 						//                                              ........................................................
 					}
 					WriteUint64(x.packet.Payload, 0, id)
@@ -297,7 +297,7 @@ func (this *ICMPNative) transmitThread() {
 						Code:           0,
 						Identifier:     this.identifier,
 						SequenceNumber: SequenceNumber,
-						Payload:        []byte("\000\000\000\000\000\000\000\000....Hello World................................."),
+						Payload:        []byte("\000\000\000\000\000\000\000\000....github.com/claytonsingh/icmp-exporter......."),
 						//                                              ........................................................
 					}
 					WriteUint64(x.packet.Payload, 0, id)
