@@ -9,7 +9,11 @@ import (
 )
 
 func GetDefaultRouterInterface4() (string, error) {
-	var bufsize int = 4096
+	const bufsize int = 4096
+
+	const destinationAddress = "00000000"
+	const destinationMask = "00000000"
+	const gatewayFlags = '3'
 
 	fd, err := os.Open("/proc/net/route")
 	if err != nil {
@@ -35,7 +39,7 @@ func GetDefaultRouterInterface4() (string, error) {
 		// 6 - Metric
 		// 7 - Mask
 		fields := strings.Fields(string(line))
-		if fields[1] == "00000000" && fields[7] == "00000000" && fields[3][3] == '3' {
+		if fields[1] == destinationAddress && fields[7] == destinationMask && fields[3][3] == gatewayFlags {
 			// default route
 			return fields[0], nil // interface name
 		}
@@ -44,7 +48,12 @@ func GetDefaultRouterInterface4() (string, error) {
 }
 
 func GetDefaultRouterInterface6() (string, error) {
-	var bufsize int = 4096
+	const bufsize int = 4096
+
+	const destinationAddress = "00000000000000000000000000000000"
+	const destinationPrefix = "00"
+	const gateway = "00000000000000000000000000000000"
+	const gatewayFlags = '3'
 
 	fd, err := os.Open("/proc/net/ipv6_route")
 	if err != nil {
@@ -72,7 +81,7 @@ func GetDefaultRouterInterface6() (string, error) {
 		// 8 - flags
 		// 9 - interface name
 		fields := strings.Fields(string(line))
-		if fields[0] == "00000000000000000000000000000000" && fields[1] == "00" && fields[4] != "00000000000000000000000000000000" && fields[8][7] == '3' {
+		if fields[0] == destinationAddress && fields[1] == destinationPrefix && fields[4] != gateway && fields[8][7] == gatewayFlags {
 			// default route
 			return fields[9], nil // interface name
 		}

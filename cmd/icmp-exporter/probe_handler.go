@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+// Get the weight for this sample
 func W(n int, l int) float32 {
 	if n < 25 || l-n < 25 {
 		return 0
@@ -222,16 +223,6 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 			}
 			score := cavg * w
 
-			// bo := " F"
-			// if r.Success {
-			// 	bo = "T "
-			// }
-
-			// if n < 60 {
-			// 	fmt.Printf("Debug: %6d %-58v %s %6d=%6.2f %6d=%6.2f %6.2f %6.2f %6.2f\n", n, r.Timestamp, bo, a, aavg, b, bavg, cavg, w, score)
-			// }
-			// fmt.Println("Debug:", n, a, aavg, b, bavg, cavg, w, score)
-
 			if score > maxScore {
 				maxScore = score
 				maxIndex = n
@@ -245,7 +236,6 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 			b += 1
 		}
 	}
-	// fmt.Println(maxIndex, len(results))
 
 	if maxIndex == len(results) {
 		bestLoss = b
@@ -262,7 +252,6 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 		job.Mutex.Unlock()
 	}
 
-	// fmt.Println(limit, maxIndex, maxScore, bestRTT)
 	probeLoss.WithLabelValues(labels...).Set(1.0 - float64(bestLoss)/(float64(maxIndex)))
 	probeSamples.WithLabelValues(labels...).Set(float64(maxIndex))
 	probeLatency.WithLabelValues(labels...).Set(float64(bestRTT) / (float64(bestLoss * 1000000.0)))
@@ -272,15 +261,6 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	mean := (float64(sumRTT) / 1000000.0) / float64(maxIndex)
 	mean2 := (float64(sumRTT2) / (1000000.0 * 1000000.0)) / float64(maxIndex)
 	probeDeviation.WithLabelValues(labels...).Set(math.Sqrt(mean2 - mean*mean))
-	// jobMap.Range(func(key any, value any) bool {
-	// 	if job, ok := value.(*PingJob); ok {
-	// 		job.Mutex.Lock()
-	// 		probeSentCount.WithLabelValues(labels...).Add(float64(job.Sent_Count))
-	// 		probeRecvCount.WithLabelValues(labels...).Add(float64(job.Recv_Count))
-	// 		job.Mutex.Unlock()
-	// 	}
-	// 	return true
-	// })
 
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 	h.ServeHTTP(w, r)

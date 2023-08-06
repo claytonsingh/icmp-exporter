@@ -18,22 +18,27 @@ import (
 )
 
 var (
-	promIcmpTxPackets = promauto.NewCounter(prometheus.CounterOpts{
+	txPackets = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "icmp_packets_sent_total",
 		Help: "The total number of transmitted packets",
 	})
-	promIcmpRxPackets = promauto.NewCounter(prometheus.CounterOpts{
+	rxPackets = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "icmp_packets_recv_total",
 		Help: "The total number of received packets",
 	})
-	promIcmpErPackets = promauto.NewCounter(prometheus.CounterOpts{
+	erPackets = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "icmp_packets_error_total",
 		Help: "The total number of error packets",
 	})
-	promIcmpActiveProbes = promauto.NewGauge(prometheus.GaugeOpts{
+	activeProbes = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "icmp_active_probes",
 		Help: "The number of active probes",
 	})
+)
+
+const (
+	payload = "\000\000\000\000\000\000\000\000....github.com/claytonsingh/icmp-exporter......."
+	//                                 ........................................................
 )
 
 type nativePinger struct {
@@ -107,13 +112,6 @@ func (this *ICMPNative) Start() {
 		if err := socket_set_flags(this.socket4, this.timestampFlags, 0, 0); err != nil {
 			panic(err)
 		}
-
-		// filter := fmt.Sprintf(`
-		// (icmp[icmptype] == 0 && icmp[4:2] == %[1]d)
-		// `, this.m_identifier)
-		// if err := SetBerkeleyPacketFilter(this.m_socket_4, layers.LinkTypeIPv4, filter); err != nil {
-		// 	panic(err)
-		// }
 
 		if err := (BpfFilter{
 			// Check for ipv4
@@ -194,7 +192,7 @@ func (this *ICMPNative) timeoutThread() {
 			time.Sleep(this.timeout)
 		} else {
 			dt := pinger.timestampStart.Sub(time.Now()) + this.timeout
-			// fmt.Println("DT:", dt, &pinger.Job, front.Key, pinger.Job.IPAddress, pinger.Job.Sent_count)
+
 			if dt > 0 {
 				time.Sleep(dt)
 			}
@@ -205,7 +203,7 @@ func (this *ICMPNative) timeoutThread() {
 			// if there was an error dont count the packet
 			if pinger.timestampSend > 0 && pinger.timestampRecv != -1 && (pinger.timestampRecv == 0 || pinger.timestampSend <= pinger.timestampRecv) {
 				// Increment sent packets counter
-				promIcmpTxPackets.Inc()
+				txPackets.Inc()
 
 				// if both sent and recv are set then we count it as a success
 				if pinger.timestampRecv > 0 {
@@ -214,7 +212,7 @@ func (this *ICMPNative) timeoutThread() {
 						RountripTime: pinger.timestampRecv - pinger.timestampSend,
 						Timestamp:    pinger.timestampStart,
 					})
-					promIcmpRxPackets.Inc()
+					rxPackets.Inc()
 				} else {
 					pinger.probe.AddSample(PingResult{
 						Success:      false,
@@ -223,7 +221,7 @@ func (this *ICMPNative) timeoutThread() {
 					})
 				}
 			} else {
-				promIcmpErPackets.Inc()
+				erPackets.Inc()
 			}
 			pinger.mutex.Unlock()
 		}
@@ -239,7 +237,7 @@ func (this *ICMPNative) transmitThread() {
 		probes := this.probes
 		this.probeMutex.Unlock()
 
-		promIcmpActiveProbes.Set(float64(len(probes)))
+		activeProbes.Set(float64(len(probes)))
 		if len(probes) == 0 {
 			time.Sleep(1 * time.Second)
 			continue
@@ -257,7 +255,7 @@ func (this *ICMPNative) transmitThread() {
 
 			now := time.Now()
 			dt := this.nextPacket.Sub(now)
-			// fmt.Println("send", dt, interpacket_duration)
+
 			if dt > 0 {
 				time.Sleep(dt)
 			} else if dt < time.Second {
@@ -279,9 +277,9 @@ func (this *ICMPNative) transmitThread() {
 						Code:           0,
 						Identifier:     this.identifier,
 						SequenceNumber: SequenceNumber,
-						Payload:        []byte("\000\000\000\000\000\000\000\000....github.com/claytonsingh/icmp-exporter......."),
-						//                                              ........................................................
+						Payload:        make([]byte, len(payload)),
 					}
+					copy(x.packet.Payload, payload)
 					WriteUint64(x.packet.Payload, 0, id)
 
 					n := x.packet.Serialize4(buf)
@@ -297,9 +295,9 @@ func (this *ICMPNative) transmitThread() {
 						Code:           0,
 						Identifier:     this.identifier,
 						SequenceNumber: SequenceNumber,
-						Payload:        []byte("\000\000\000\000\000\000\000\000....github.com/claytonsingh/icmp-exporter......."),
-						//                                              ........................................................
+						Payload:        make([]byte, len(payload)),
 					}
+					copy(x.packet.Payload, payload)
 					WriteUint64(x.packet.Payload, 0, id)
 
 					n := x.packet.Serialize6(buf)
@@ -340,11 +338,8 @@ func (this *ICMPNative) receiveThread(sock int) {
 		if ndata < 0 {
 			panic(ndata)
 		} else if ip != nil {
-			//fmt.Printf("rx msg:  %v %v\n", ip.String(), ts)
-			//fmt.Printf("rx data: %v - % X\n", ndata, data[:ndata])
 
-			if IsIPv4(ip) {
-				//var eth layers.Ethernet
+			if IsIPv4(ip) { // Decode and match an ipv4 packet
 				decoded := []gopacket.LayerType{}
 				if err := parser4.DecodeLayers(data[:ndata], &decoded); err == nil {
 					for _, layer := range decoded {
@@ -364,21 +359,11 @@ func (this *ICMPNative) receiveThread(sock int) {
 							}
 						}
 					}
-
-					// for _, layerType := range decoded {
-					// 	switch layerType {
-					// 	// case layers.LayerTypeIPv6:
-					// 	// 	fmt.Println("    IP6 ", ip6.SrcIP, ip6.DstIP)
-					// 	case layers.LayerTypeIPv4:
-					// 		fmt.Println("rx IP4: ", ip4.SrcIP, ip4.DstIP)
-					// 	case layers.LayerTypeICMPv4:
-					// 		fmt.Println("rx IC4: ", ic4.Seq, ic4.Payload)
-					// 	}
-					// }
 				} else {
 					fmt.Println("rx err ", err)
 				}
-			} else if IsIPv6(ip) {
+
+			} else if IsIPv6(ip) { // Decode and match an ipv6 packet
 				decoded := []gopacket.LayerType{}
 				if err := parser6.DecodeLayers(data[:ndata], &decoded); err == nil {
 					for _, layer := range decoded {
@@ -388,12 +373,6 @@ func (this *ICMPNative) receiveThread(sock int) {
 								Seq := ReadUInt16(ic6.Payload, 2)
 
 								np, ok := this.nativePinger.Get(id)
-
-								//fmt.Println("rx YYY", ok, np, ts)
-								//fmt.Printf("tx2 data: %v - % X\n", ndata, data[:ndata])
-								//fmt.Println("rx YYY", ok, ip4.DstIP.Equal(np.Job.IPAddress), ic4.TypeCode == (8<<8), ts)
-								//fmt.Println("rx YYY", ok, ip6.DstIP, ic6.TypeCode == (128<<8), Seq == np.packet.SequenceNumber, ts)
-								//fmt.Printf("tx3 data: % X\n", ip6.Payload)
 
 								if ok && np.probe.IPAddress.Equal(ip) && ic6.TypeCode&0xFF00 == 0x8100 && Seq == np.packet.SequenceNumber {
 									np.mutex.Lock()
@@ -405,17 +384,6 @@ func (this *ICMPNative) receiveThread(sock int) {
 							}
 						}
 					}
-
-					// for _, layerType := range decoded {
-					// 	switch layerType {
-					// 	// case layers.LayerTypeIPv6:
-					// 	// 	fmt.Println("    IP6 ", ip6.SrcIP, ip6.DstIP)
-					// 	case layers.LayerTypeIPv4:
-					// 		fmt.Println("rx IP4: ", ip4.SrcIP, ip4.DstIP)
-					// 	case layers.LayerTypeICMPv4:
-					// 		fmt.Println("rx IC4: ", ic4.Seq, ic4.Payload)
-					// 	}
-					// }
 				} else {
 					fmt.Println("rx err ", err)
 				}
@@ -440,15 +408,10 @@ func (this *ICMPNative) errorThread(sock int) {
 		if ndata == -1 {
 			fds := []unix.PollFd{{Fd: int32(sock), Events: unix.POLLERR}}
 			unix.Poll(fds, 2100)
-			//fmt.Printf("tx poll: %v %v\n", fds[0].Events, fds[0].Revents)
 			continue
 		} else if ndata < 0 {
 			panic(ndata)
 		} else {
-			// ihl := (data[0] & 0x0F) * 4
-			// fmt.Printf("tx data: %v - % X\n", ndata, data[:ndata])
-			// fmt.Printf("tx msg:  %v\n", ts)
-
 			decoded := []gopacket.LayerType{}
 			if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
 				for _, layer := range decoded {
@@ -457,7 +420,6 @@ func (this *ICMPNative) errorThread(sock int) {
 
 						np, ok := this.nativePinger.Get(id)
 
-						// fmt.Println("rx YYY", ok, ip4.DstIP.Equal(np.Job.IPAddress), ic4.TypeCode == (8<<8), ic4.Seq == np.packet.SequenceNumber)
 						if ok && ip4.DstIP.Equal(np.probe.IPAddress) && ic4.TypeCode == (8<<8) && ic4.Seq == np.packet.SequenceNumber {
 							np.mutex.Lock()
 							if np.timestampSend == 0 {
@@ -472,12 +434,6 @@ func (this *ICMPNative) errorThread(sock int) {
 
 						np, ok := this.nativePinger.Get(id)
 
-						//fmt.Println("rx YYY", ok, np, ts)
-						//fmt.Printf("tx2 data: %v - % X\n", ndata, data[:ndata])
-						//fmt.Println("rx YYY", ok, ip4.DstIP.Equal(np.Job.IPAddress), ic4.TypeCode == (8<<8), ts)
-						//fmt.Println("rx YYY", ok, ip6.DstIP, ic6.TypeCode == (128<<8), Seq == np.packet.SequenceNumber, ts)
-						//fmt.Printf("tx3 data: % X\n", ip6.Payload)
-
 						if ok && ip6.DstIP.Equal(np.probe.IPAddress) && ic6.TypeCode&0xFF00 == 0x8000 && Seq == np.packet.SequenceNumber {
 							np.mutex.Lock()
 							if np.timestampSend == 0 {
@@ -488,56 +444,12 @@ func (this *ICMPNative) errorThread(sock int) {
 						break
 					}
 				}
-
-				// for _, layerType := range decoded {
-				// 	switch layerType {
-				// 	// case layers.LayerTypeIPv6:
-				// 	// 	fmt.Println("    IP6 ", ip6.SrcIP, ip6.DstIP)
-				// 	case layers.LayerTypeIPv4:
-				// 		fmt.Println("tx IP4: ", ip4.SrcIP, ip4.DstIP)
-				// 	case layers.LayerTypeICMPv4:
-				// 		fmt.Println("tx IC4: ", ic4.Seq, ic4.Payload)
-				// 	}
-				// }
 			} else {
 				fmt.Println("er err ", err)
 			}
 		}
 	}
 }
-
-// func socket_set_ioctl(fd int, name string, so_timestamping_flags int) error {
-
-// 	if len(name) >= unix.IFNAMSIZ {
-// 		return fmt.Errorf("interface name too long")
-// 	}
-
-// 	ts := ifreq{
-// 		ifr_data: hwtstamp_config{},
-// 	}
-
-// 	if so_timestamping_flags&unix.SOF_TIMESTAMPING_TX_HARDWARE > 0 {
-// 		ts.ifr_data.tx_type = 1
-// 	}
-// 	if so_timestamping_flags&unix.SOF_TIMESTAMPING_RX_HARDWARE > 0 {
-// 		ts.ifr_data.rx_filter = 1
-// 	}
-
-// 	copy(ts.ifr_name[:], name)
-
-// 	fmt.Printf("flags: %v, tx_type: %v, rx_filters: %v\n", ts.ifr_data.flags, ts.ifr_data.tx_type, ts.ifr_data.rx_filter)
-
-// 	if err := syscall.SetsockoptString(fd, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, name); err != nil {
-// 		panic(err)
-// 	}
-// 	if _, _, err := unix.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(unix.SIOCSHWTSTAMP), uintptr(unsafe.Pointer(&ts))); err < 0 {
-// 		panic(err)
-// 		// return err
-// 	}
-// 	fmt.Printf("flags: %v, tx_type: %v, rx_filters: %v\n", ts.ifr_data.flags, ts.ifr_data.tx_type, ts.ifr_data.rx_filter)
-
-// 	return nil
-// }
 
 func socket_set_flags(fd int, so_timestamping_flags int, so_timestamp int, so_timestampns int) error {
 

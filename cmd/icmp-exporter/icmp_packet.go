@@ -41,13 +41,8 @@ func ComputeChecksum4(packet []byte, index int, count int) uint16 {
 		xsum += uint(packet[index+count-1])
 	}
 
-	for true {
-		var temp = xsum >> 16
-		if temp == 0 {
-			break
-		}
-		xsum = temp + (xsum & 0xFFFF)
-	}
+	xsum = (xsum >> 16) + (xsum & 0xFFFF)
+	xsum = (xsum >> 16) + (xsum & 0xFFFF)
 
 	return (uint16)(0xFFFF ^ xsum)
 }
@@ -63,9 +58,6 @@ func (this IcmpPacket) Serialize6(buffer []byte) int {
 	nw.WriteUint16(this.Identifier)
 	nw.WriteUint16(this.SequenceNumber)
 	nw.WriteBytes(this.Payload)
-
-	//nw.Seek(2)
-	//nw.WriteUint16(ComputeChecksum6(buffer, 0, length))
-
+	// For ipv6 do not set the checksum
 	return length
 }

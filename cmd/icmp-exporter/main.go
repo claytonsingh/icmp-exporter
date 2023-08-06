@@ -47,17 +47,6 @@ func (this *PingProbe) AddSample(sample PingResult) {
 		this.ResultLimit = this.Results.Size
 	}
 
-	// var insertAt int
-	// elements := this.Results.Snapshot()
-	// for i := range elements {
-	// 	index := len(elements) - i - 1
-	// 	if sample.Timestamp.After(elements[index].Timestamp) {
-	// 		insertAt = index + 1
-	// 		break
-	// 	}
-	// }
-	// this.Results.Insert(insertAt, sample)
-
 	this.Results.Append(sample)
 	if sample.Success {
 		this.RecvCount += 1
@@ -104,7 +93,7 @@ func parseArguments() Settings {
 		dropCapabilities: false,
 	}
 
-	i_will_be_good := flag.Bool("i-wont-be-evil", false, "Unlocks all other settings")
+	i_will_be_good := flag.Bool("i-wont-be-evil", false, "Unlocks advanced settings")
 	flag.StringVar(&settings.iface4, "interface4", defaults.iface4, "IPv4 interface to bind to.")
 	flag.StringVar(&settings.iface6, "interface6", defaults.iface6, "IPv6 interface to bind to.")
 	flag.BoolVar(&settings.useHardware, "hard", defaults.useHardware, "Use hardware timestamping.")
@@ -139,13 +128,13 @@ func parseArguments() Settings {
 
 	if *i_will_be_good {
 		if settings.timeout < 10 {
-			errors = append(errors, "timeout must be greater then 9")
+			errors = append(errors, "timeout must be 10 or more")
 		}
 		if settings.maxpps < 1 {
-			errors = append(errors, "max_pps must be greater then 0")
+			errors = append(errors, "max_pps must be 1 or more")
 		}
 		if settings.maxpps > 1000000 {
-			errors = append(errors, "max_pps must be less then 1000001")
+			errors = append(errors, "max_pps must be 1000000 or less")
 		}
 	} else {
 		settings.timeout = defaults.timeout
@@ -163,31 +152,14 @@ func parseArguments() Settings {
 }
 
 func main() {
-	log.Println("prom-ping version: ", versionString)
+	log.Println("icmp-exporter version: ", versionString)
 	settings := parseArguments()
 
 	p := NewICMPNative(settings.useHardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.maxpps)
 	p.Start()
 
-	go func() {
-		Wait := signal.GetWaiter(true)
-		for {
-			Wait()
-			r := make([]*PingProbe, 0)
-			probeMap.Range(func(key any, value any) bool {
-				if v, ok := value.(*PingProbe); ok {
-					r = append(r, v)
-				}
-				return true
-			})
-			sort.Slice(r, func(i int, j int) bool {
-				return bytes.Compare(r[i].IPAddress, r[j].IPAddress) < 0
-			})
-			p.SetProbes(r)
-			time.Sleep(1 * time.Second)
-		}
-	}()
-	go PruneMap()
+	go UpdateProbesThread(p)
+	go PruneMapThread()
 
 	ln, err := net.Listen("tcp", settings.listenAddr)
 	if err != nil {
@@ -225,39 +197,40 @@ func main() {
 }
 
 func GetProbe(ip net.IP) (*PingProbe, bool) {
-	var j [16]byte
+	var ip_bytes [16]byte
 	ip = ip.To16()
-	copy(j[:], ip[:])
+	copy(ip_bytes[:], ip[:])
 	now := time.Now()
-	if temp, ok := probeMap.Load(j); ok {
-		val := temp.(*PingProbe)
-		val.Mutex.Lock()
-		val.LastAccess = now
-		val.Mutex.Unlock()
-		return val, false
+	if untyped, ok := probeMap.Load(ip_bytes); ok {
+		probe := untyped.(*PingProbe)
+		probe.Mutex.Lock()
+		probe.LastAccess = now
+		probe.Mutex.Unlock()
+		return probe, false
 	} else {
-		new := &PingProbe{IPAddress: j[:], Results: NewDataBuff[PingResult](250), LastAccess: now}
-		temp, _ := probeMap.LoadOrStore(j, new)
-		val := temp.(*PingProbe)
-		if val == new {
+		new := &PingProbe{IPAddress: ip_bytes[:], Results: NewDataBuff[PingResult](250), LastAccess: now}
+		untyped, _ := probeMap.LoadOrStore(ip_bytes, new)
+		probe := untyped.(*PingProbe)
+		if probe == new {
 			signal.Signal()
 		} else {
-			val.Mutex.Lock()
-			val.LastAccess = now
-			val.Mutex.Unlock()
+			probe.Mutex.Lock()
+			probe.LastAccess = now
+			probe.Mutex.Unlock()
 		}
-		return val, val == new
+		return probe, probe == new
 	}
 }
 
-func PruneMap() {
+// Clean out old jobs
+func PruneMapThread() {
 	for {
 		time.Sleep(1 * time.Second)
 		expire := time.Now().Add(time.Duration(-10 * 60 * time.Second))
 		doRebuild := false
 		probeMap.Range(func(key any, value any) bool {
 			if probe, ok := value.(*PingProbe); ok {
-				// log.Println(key, expire.After(job.LastAccess), expire.Sub(job.LastAccess))
+
 				remove := false
 				probe.Mutex.Lock()
 				if expire.After(probe.LastAccess) {
@@ -274,5 +247,24 @@ func PruneMap() {
 		if doRebuild {
 			signal.Signal()
 		}
+	}
+}
+
+func UpdateProbesThread(p *ICMPNative) {
+	Wait := signal.GetWaiter(true)
+	for {
+		Wait()
+		probes := make([]*PingProbe, 0)
+		probeMap.Range(func(key any, value any) bool {
+			if probe, ok := value.(*PingProbe); ok {
+				probes = append(probes, probe)
+			}
+			return true
+		})
+		sort.Slice(probes, func(i int, j int) bool {
+			return bytes.Compare(probes[i].IPAddress, probes[j].IPAddress) < 0
+		})
+		p.SetProbes(probes)
+		time.Sleep(1 * time.Second)
 	}
 }

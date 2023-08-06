@@ -13,7 +13,7 @@ Usage of icmp-exporter:
   -hard
         Use hardware timestamping.
   -i-wont-be-evil
-        Unlocks all other settings
+        Unlocks advanced settings
   -interface4 string
         IPv4 interface to bind to. (default "auto")
   -interface6 string

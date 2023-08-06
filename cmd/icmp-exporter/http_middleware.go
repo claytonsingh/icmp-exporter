@@ -11,21 +11,21 @@ import (
 )
 
 var (
-	promHttpRequestDurHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	requestDurationHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "http_request_duration_seconds",
 		Help:    "The latency of the HTTP requests.",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"path", "method", "status"})
-	promHttpResponseSizeHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	responseSizeHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "http_response_size_bytes",
 		Help:    "The size of the HTTP responses.",
 		Buckets: prometheus.ExponentialBuckets(100, 10, 6),
 	}, []string{"path", "method", "status"})
-	promHttpRequestsInflight = promauto.NewGauge(prometheus.GaugeOpts{
+	requestsInflight = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "http_requests_inflight",
 		Help: "The number of inflight requests being handled at the same time.",
 	})
-	promHttpRequestMethods = map[string]bool{"get": true, "put": true, "post": true, "delete": true, "connect": true, "options": true, "notify": true, "trace": true, "patch": true}
+	requestMethods = map[string]bool{"get": true, "put": true, "post": true, "delete": true, "connect": true, "options": true, "notify": true, "trace": true, "patch": true}
 )
 
 // Handler returns an measuring standard http.Handler.
@@ -38,9 +38,9 @@ func PromtheusMiddlewareHandler(h http.Handler) http.Handler {
 
 		// Measure http request
 		start := time.Now()
-		promHttpRequestsInflight.Inc()
+		requestsInflight.Inc()
 		defer func() {
-			promHttpRequestsInflight.Dec()
+			requestsInflight.Dec()
 			duration := time.Since(start)
 
 			// If return status is 404 then dont return a path to prevent high cardinality metrics
@@ -52,12 +52,12 @@ func PromtheusMiddlewareHandler(h http.Handler) http.Handler {
 			statusCode := strconv.Itoa(wp.statusCode)
 
 			method := strings.ToLower(r.Method)
-			if _, ok := promHttpRequestMethods[method]; !ok {
+			if _, ok := requestMethods[method]; !ok {
 				method = "unknown"
 			}
 
-			promHttpRequestDurHistogram.WithLabelValues(path, method, statusCode).Observe(duration.Seconds())
-			promHttpResponseSizeHistogram.WithLabelValues(path, method, statusCode).Observe(float64(wp.bytesWritten))
+			requestDurationHistogram.WithLabelValues(path, method, statusCode).Observe(duration.Seconds())
+			responseSizeHistogram.WithLabelValues(path, method, statusCode).Observe(float64(wp.bytesWritten))
 		}()
 		h.ServeHTTP(wp, r)
 	})
