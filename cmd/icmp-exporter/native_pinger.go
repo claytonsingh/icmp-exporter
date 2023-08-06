@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"os"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/google/gopacket"
@@ -15,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/net/bpf"
 	"golang.org/x/sys/unix"
+	syscall "golang.org/x/sys/unix"
 )
 
 var (
@@ -78,10 +78,10 @@ func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, int
 	this.interface6 = iface6
 
 	if hardware {
-		this.timestampFlags = unix.SOF_TIMESTAMPING_RX_HARDWARE | unix.SOF_TIMESTAMPING_TX_HARDWARE | unix.SOF_TIMESTAMPING_RAW_HARDWARE
+		this.timestampFlags = syscall.SOF_TIMESTAMPING_RX_HARDWARE | syscall.SOF_TIMESTAMPING_TX_HARDWARE | syscall.SOF_TIMESTAMPING_RAW_HARDWARE
 		this.timestampType = 2
 	} else {
-		this.timestampFlags = unix.SOF_TIMESTAMPING_RX_SOFTWARE | unix.SOF_TIMESTAMPING_TX_SOFTWARE | unix.SOF_TIMESTAMPING_SOFTWARE
+		this.timestampFlags = syscall.SOF_TIMESTAMPING_RX_SOFTWARE | syscall.SOF_TIMESTAMPING_TX_SOFTWARE | syscall.SOF_TIMESTAMPING_SOFTWARE
 		this.timestampType = 0
 	}
 

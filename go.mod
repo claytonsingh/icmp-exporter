@@ -9,7 +9,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/prometheus/client_golang v1.13.0
 	golang.org/x/net v0.7.0
-	golang.org/x/sys v0.5.0
+	golang.org/x/sys v0.11.0
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.66
 )
 

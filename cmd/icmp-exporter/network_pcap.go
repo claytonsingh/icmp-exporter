@@ -1,11 +1,10 @@
 package main
 
 import (
-	"syscall"
 	"unsafe"
 
 	"golang.org/x/net/bpf"
-	"golang.org/x/sys/unix"
+	syscall "golang.org/x/sys/unix"
 )
 
 // https://riyazali.net/posts/berkeley-packet-filter-in-golang/
@@ -19,11 +18,11 @@ func (filter BpfFilter) ApplyTo(fd int) (err error) {
 		return e
 	}
 
-	var program = unix.SockFprog{
+	var program = syscall.SockFprog{
 		Len:    uint16(len(f)),
-		Filter: (*unix.SockFilter)(unsafe.Pointer(&f[0])),
+		Filter: (*syscall.SockFilter)(unsafe.Pointer(&f[0])),
 	}
-	var b = (*[unix.SizeofSockFprog]byte)(unsafe.Pointer(&program))[:unix.SizeofSockFprog]
+	var b = (*[syscall.SizeofSockFprog]byte)(unsafe.Pointer(&program))[:syscall.SizeofSockFprog]
 
 	if _, _, errno := syscall.Syscall6(syscall.SYS_SETSOCKOPT,
 		uintptr(fd), uintptr(syscall.SOL_SOCKET), uintptr(syscall.SO_ATTACH_FILTER),
