@@ -1,4 +1,4 @@
-module ex.com/go_ping
+module github.com/claytonsingh/icmp-exporter
 
 go 1.19
 
