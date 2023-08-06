@@ -1,11 +1,13 @@
-# What is prom-icmp?
-Prom icmp is an ICMP poller for prometheus.
+# What is icmp-exporter?
+ICMP exporter asynchronously sends pings to probe endpoints allowing the detection of path issues.
 
-The major change from blackbox is that we use counters where possible and asynchronously send packets in the background.
+Leveraging hardware timestamping features provided by the network card, uncertainty accumulated by thread scheduling and the kernel is eliminated, allowing timestamps to the nearest microsecond.
+
+The major difference from blackbox is that we use counters where possible and asynchronously send packets in the background. When a request to the probe endpoint is recieved data collection is started for that target sending a ping every `interval`. This background collection continues as long as the probe endpoint for that target is requested more than once every 10m.
 
 # Command line
 ```
-Usage of prom-icmp:
+Usage of icmp-exporter:
   -drop
         Drop capabilities after starting.
   -hard
@@ -56,7 +58,7 @@ scrape_configs:
 ```
 
 # Building
+Assuming you have golang setup
 ```
-apt install libpcap-dev
-CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/prom-icmp-amd64 cmd/prom-icmp/*.go
+CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/icmp-exporter-amd64 cmd/icmp-exporter/*.go
 ```

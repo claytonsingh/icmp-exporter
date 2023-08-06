@@ -222,8 +222,6 @@ func main() {
 	if err := http.Serve(ln, PromtheusMiddlewareHandler(mux)); err != nil {
 		panic(err)
 	}
-
-	// select {}
 }
 
 func GetProbe(ip net.IP) (*PingProbe, bool) {
