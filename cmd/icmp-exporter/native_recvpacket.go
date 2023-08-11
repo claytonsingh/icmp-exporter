@@ -1,7 +1,7 @@
 package main
 
 /*
-#include "native_recvpacket.c"
+#include "native_recvpacket.h"
 */
 import "C"
 import (
