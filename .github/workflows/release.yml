@@ -1,0 +1,45 @@
+on:
+  push:
+    tags: 'v*'
+
+jobs:
+  releases-matrix:
+    name: Release Go Binary
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - { goos: "linux", goarch: "amd64", arch: "x64",     image: "golang:bullseye" }
+          - { goos: "linux", goarch: "386",   arch: "x86",     image: "i386/golang:bullseye" }
+          - { goos: "linux", goarch: "arm64", arch: "arm64v8", image: "arm64v8/golang:bullseye" }
+          - { goos: "linux", goarch: "arm",   arch: "arm32v7", image: "arm32v7/golang:bullseye" }
+          - { goos: "linux", goarch: "arm",   arch: "arm32v5", image: "arm32v5/golang:bullseye" }
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set Env
+      run: |
+        echo "PACKAGE_NAME=icmp-exporter-${{ matrix.goos }}-${{ matrix.arch }}" >> ${GITHUB_ENV}
+        echo "VERSION_STRING=$(git show -s --format=%cs) ${GITHUB_REF_NAME} ${GITHUB_SHA}" >> ${GITHUB_ENV}
+        echo "RELEASE_NAME=${GITHUB_REF_NAME} / $(git show -s --format=%cs)" >> ${GITHUB_ENV}
+    - uses: docker/setup-qemu-action@v2
+    - name: Build Release
+      run: |
+        docker run --rm \
+        -v $(pwd):/go/src -w /go/src \
+        -e PACKAGE_NAME="${{ env.PACKAGE_NAME }}" \
+        -e FLAGS="-X 'main.versionString=${{ env.VERSION_STRING }}'" \
+        -e CGO_ENABLED=1 \
+        -e GOOS=${{ matrix.goos }} \
+        -e GOARCH=${{ matrix.goarch }} \
+        -e GOFLAGS="-buildvcs=false" \
+        ${{ matrix.image }} \
+        .github/build.sh
+    - name: Upload Release
+      uses: softprops/action-gh-release@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        files: "${{ env.PACKAGE_NAME }}.tar.gz"
+        draft: true
+        name: "${{ env.RELEASE_NAME }}"
