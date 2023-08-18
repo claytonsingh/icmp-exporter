@@ -13,19 +13,39 @@ Usage of icmp-exporter:
   -hard
         Use hardware timestamping.
   -i-wont-be-evil
-        Unlocks advanced settings
+        Unlocks advanced settings.
+  -identifier int
+        ICMP identifier between 0 and 65535. Must be unlocked. The possible options are:
+        0 - Process pid (default)
+        1 - Random
   -interface4 string
-        IPv4 interface to bind to. (default "auto")
+        IPv4 interface to bind to. If "auto" then the default route is used. (default "auto")
   -interface6 string
-        IPv6 interface to bind to. (default "auto")
+        IPv6 interface to bind to. If "auto" then the default route is used. (default "auto")
   -interval int
-        Interval in milliseconds. Minimum 10. Must be unlocked. (default 2000)
+        ICMP interval in milliseconds. Minimum 10. Must be unlocked. (default 2000)
   -listen string
-        ip and port to listen on. (default ":9116")
+        Ip and port to listen on. (default ":9116")
   -maxpps int
         Maximum packets per second. Minimum 1. Must be unlocked. (default 10000)
   -timeout int
-        Timout in milliseconds. (default 3000)
+        ICMP timout in milliseconds. (default 3000)
+```
+
+## Running as non-root user
+`CAP_NET_ADMIN` and `CAP_NET_RAW` are required when running as an unprivlaged user.
+```
+sudo setcap 'CAP_NET_ADMIN,CAP_NET_RAW=ep' /opt/icmp-exporter/icmp-exporter-linux-x64
+```
+```
+/opt/icmp-exporter/icmp-exporter-linux-x64 -hard -drop -listen 127.0.0.1:9116
+```
+
+## Running with systemd
+Copy [icmp-exporter.service](icmp-exporter.service) into `/etc/systemd/system/`.
+```
+systemctl start icmp-exporter.service
+systemctl enable icmp-exporter.service
 ```
 
 # URL parameters
@@ -46,15 +66,15 @@ scrape_configs:
   - job_name: 'Packet Loss Exporter'
     metrics_path: /probe
     relabel_configs:
-    - target_label: __param_target
-      source_labels: [__address__]
-    - target_label: instance
-      source_labels: [__address__]
-    - target_label: __address__
-      replacement: 127.0.0.1:9116
+      - target_label: __param_target
+        source_labels: [__address__]
+      - target_label: instance
+        source_labels: [__address__]
+      - target_label: __address__
+        replacement: 127.0.0.1:9116
     static_configs:
-    - targets:
-      - example.com
+      - targets:
+        - example.com
 ```
 
 # Network card support

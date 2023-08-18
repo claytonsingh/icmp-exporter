@@ -68,19 +68,22 @@ type ICMPNative struct {
 	minInterval    time.Duration
 }
 
-func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, interval int, max_pps int) *ICMPNative {
+func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, interval int, max_pps int, identifier uint16) *ICMPNative {
 	var this ICMPNative
-	this.identifier = (uint16)(os.Getpid())
-	// If this is launched in a docker container then we are pid 1 so pick a random identifier
-	if this.identifier == 1 {
-		this.identifier = (uint16)(rand.Intn(65535))
-	}
 	this.nativePinger = NewSafeOrderedMap[uint64, *nativePinger]()
 	this.timeout = time.Duration(timeout) * time.Millisecond
 	this.interval = time.Duration(interval) * time.Millisecond
 	this.minInterval = time.Duration(float64(time.Second) / float64(max_pps))
 	this.interface4 = iface4
 	this.interface6 = iface6
+
+	this.identifier = identifier
+	if this.identifier == 0 { // Default identifier is pid
+		this.identifier = (uint16)(os.Getpid())
+	}
+	if this.identifier == 1 { // If this is launched in a docker container then we are pid 1 so pick a random identifier
+		this.identifier = (uint16)(rand.Intn(65535))
+	}
 
 	if hardware {
 		this.timestampFlags = syscall.SOF_TIMESTAMPING_RX_HARDWARE | syscall.SOF_TIMESTAMPING_TX_HARDWARE | syscall.SOF_TIMESTAMPING_RAW_HARDWARE

@@ -77,6 +77,7 @@ type Settings struct {
 	interval         int
 	maxpps           int
 	dropCapabilities bool
+	identifier       int
 }
 
 func parseArguments() Settings {
@@ -91,17 +92,19 @@ func parseArguments() Settings {
 		interval:         2000,
 		maxpps:           10000,
 		dropCapabilities: false,
+		identifier:       0,
 	}
 
-	i_will_be_good := flag.Bool("i-wont-be-evil", false, "Unlocks advanced settings")
-	flag.StringVar(&settings.iface4, "interface4", defaults.iface4, "IPv4 interface to bind to.")
-	flag.StringVar(&settings.iface6, "interface6", defaults.iface6, "IPv6 interface to bind to.")
+	i_will_be_good := flag.Bool("i-wont-be-evil", false, "Unlocks advanced settings.")
+	flag.StringVar(&settings.iface4, "interface4", defaults.iface4, "IPv4 interface to bind to. If \"auto\" then the default route is used.")
+	flag.StringVar(&settings.iface6, "interface6", defaults.iface6, "IPv6 interface to bind to. If \"auto\" then the default route is used.")
 	flag.BoolVar(&settings.useHardware, "hard", defaults.useHardware, "Use hardware timestamping.")
 	flag.BoolVar(&settings.dropCapabilities, "drop", defaults.dropCapabilities, "Drop capabilities after starting.")
-	flag.StringVar(&settings.listenAddr, "listen", defaults.listenAddr, "ip and port to listen on.")
-	flag.IntVar(&settings.timeout, "timeout", defaults.timeout, "Timout in milliseconds.")
-	flag.IntVar(&settings.interval, "interval", defaults.interval, "Interval in milliseconds. Minimum 10. Must be unlocked.")
+	flag.StringVar(&settings.listenAddr, "listen", defaults.listenAddr, "Ip and port to listen on.")
+	flag.IntVar(&settings.timeout, "timeout", defaults.timeout, "ICMP timout in milliseconds.")
+	flag.IntVar(&settings.interval, "interval", defaults.interval, "ICMP interval in milliseconds. Minimum 10. Must be unlocked.")
 	flag.IntVar(&settings.maxpps, "maxpps", defaults.maxpps, "Maximum packets per second. Minimum 1. Must be unlocked.")
+	flag.IntVar(&settings.identifier, "identifier", defaults.identifier, "ICMP identifier between 0 and 65535. Must be unlocked. The possible options are:\n0 - Process pid (default)\n1 - Random")
 	flag.Parse()
 
 	if settings.iface4 == "auto" {
@@ -130,15 +133,16 @@ func parseArguments() Settings {
 		if settings.timeout < 10 {
 			errors = append(errors, "timeout must be 10 or more")
 		}
-		if settings.maxpps < 1 {
-			errors = append(errors, "max_pps must be 1 or more")
+		if (settings.maxpps < 1) || (settings.maxpps > 1000000) {
+			errors = append(errors, "maxpps must be between 1 and 1000000")
 		}
-		if settings.maxpps > 1000000 {
-			errors = append(errors, "max_pps must be 1000000 or less")
+		if (settings.identifier < 0) || (settings.identifier > 65535) {
+			errors = append(errors, "identifier must be between 0 and 65535")
 		}
 	} else {
 		settings.timeout = defaults.timeout
 		settings.maxpps = defaults.maxpps
+		settings.identifier = defaults.identifier
 	}
 
 	if errors != nil {
@@ -155,7 +159,7 @@ func main() {
 	log.Println("icmp-exporter version: ", versionString)
 	settings := parseArguments()
 
-	p := NewICMPNative(settings.useHardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.maxpps)
+	p := NewICMPNative(settings.useHardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.maxpps, (uint16)(settings.identifier))
 	p.Start()
 
 	go UpdateProbesThread(p)
