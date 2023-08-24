@@ -1,7 +1,5 @@
 # What is icmp-exporter?
-ICMP exporter for [prometheus](https://prometheus.io) that asynchronously sends pings to probe endpoints allowing the detection of path issues.
-
-Leveraging hardware timestamping features provided by the network card, uncertainty accumulated by thread scheduling and the kernel is eliminated, allowing timestamps to the nearest microsecond.
+ICMP exporter for [prometheus](https://prometheus.io) efficiently detects path issues by asynchronously sending pings to probe endpoints. Utilizing network cards hardware timestamping features to eliminate scheduling and kernel-related uncertainties, achieving precision to the nearest microsecond.
 
 The major difference from blackbox is that we use counters where possible and asynchronously send packets in the background. When a request to the probe endpoint is recieved data collection is started for that target sending a ping every `interval`. This background collection continues as long as the probe endpoint for that target is requested more than once every 10m.
 
@@ -117,5 +115,5 @@ Hardware Receive Filter Modes:
 # Building
 Assuming you have golang setup
 ```
-CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/icmp-exporter-amd64 cmd/icmp-exporter/*.go
+CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/icmp-exporter-amd64 ./cmd/icmp-exporter/
 ```

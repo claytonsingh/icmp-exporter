@@ -65,7 +65,6 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestTarget := target
 	requestIp := net.ParseIP(target)
 	if requestIp == nil {
 		addresses, err := resolver.Resolve(target)
@@ -125,49 +124,49 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	probeSentTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "icmp_probe_packets_sent_total",
 		Help: "How many icmp packets were sent to the target ip",
-	}, []string{"ip", "target"})
+	}, []string{"ip"})
 	registry.MustRegister(probeSentTotal)
 
 	probeRecvTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "icmp_probe_packets_recv_total",
 		Help: "How many icmp packets were recieved from the target ip",
-	}, []string{"ip", "target"})
+	}, []string{"ip"})
 	registry.MustRegister(probeRecvTotal)
 
 	probeLatencyTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "icmp_probe_latency_seconds_total",
 		Help: "",
-	}, []string{"ip", "target"})
+	}, []string{"ip"})
 	registry.MustRegister(probeLatencyTotal)
 
 	probeLatencySqTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "icmp_probe_latency_squared_seconds_total",
 		Help: "",
-	}, []string{"ip", "target"})
+	}, []string{"ip"})
 	registry.MustRegister(probeLatencySqTotal)
 
 	probeLatency := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "icmp_probe_latency_seconds",
 		Help: "",
-	}, []string{"ip", "target"})
+	}, []string{"ip"})
 	registry.MustRegister(probeLatency)
 
 	probeDeviation := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "icmp_probe_standard_deviation_seconds",
 		Help: "",
-	}, []string{"ip", "target"})
+	}, []string{"ip"})
 	registry.MustRegister(probeDeviation)
 
 	probeLoss := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "icmp_probe_loss_ratio",
 		Help: "",
-	}, []string{"ip", "target"})
+	}, []string{"ip"})
 	registry.MustRegister(probeLoss)
 
 	probeSamples := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "icmp_probe_samples_count",
 		Help: "",
-	}, []string{"ip", "target"})
+	}, []string{"ip"})
 	registry.MustRegister(probeSamples)
 
 	job, new := GetProbe(requestIp)
@@ -175,7 +174,7 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 		signal.Signal()
 	}
 
-	labels := []string{job.IPAddress.String(), requestTarget}
+	labels := []string{job.IPAddress.String()}
 
 	job.Mutex.Lock()
 	probeSentTotal.WithLabelValues(labels...).Add(float64(job.SentCount))
