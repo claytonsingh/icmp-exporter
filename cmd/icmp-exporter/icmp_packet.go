@@ -22,23 +22,24 @@ func (this IcmpPacket) Serialize4(buffer []byte) int {
 	nw.WriteBytes(this.Payload)
 
 	nw.Seek(2)
-	nw.WriteUint16(ComputeChecksum4(buffer, 0, length))
+	nw.WriteUint16(ComputeChecksum4(buffer))
 
 	return length
 }
 
-func ComputeChecksum4(packet []byte, index int, count int) uint16 {
+func ComputeChecksum4(packet []byte) uint16 {
 	// https://tools.ietf.org/html/rfc1071
 	var xsum uint = 0
+	count := len(packet) - 1
 
 	// Sum up the 16-bits
-	for i := 0; i < count/2; i++ {
-		xsum += (uint(packet[index+i*2]) << 8) | uint(packet[index+i*2+1])
+	for i := 0; i < count; i += 2 {
+		xsum += (uint(packet[i+0]) << 8) | uint(packet[i+1])
 	}
 
-	// Pad if necessary
-	if (count % 2) != 0 {
-		xsum += uint(packet[index+count-1])
+	// Add left-over byte
+	if (count & 1) == 0 {
+		xsum += uint(packet[count])
 	}
 
 	xsum = (xsum >> 16) + (xsum & 0xFFFF)
