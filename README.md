@@ -117,3 +117,12 @@ Assuming you have golang setup
 ```
 CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/icmp-exporter-amd64 ./cmd/icmp-exporter/
 ```
+
+# Metrics
+Standard deviation over time
+```
+sqrt(
+  (increase(icmp_probe_latency_squared_seconds_total{}[10m]) / increase(icmp_probe_packets_recv_total{}[10m])) -
+  (increase(icmp_probe_latency_seconds_total{}[10m])         / increase(icmp_probe_packets_recv_total{}[10m]))^2
+)
+```

@@ -203,8 +203,18 @@ func (this *ICMPNative) timeoutThread() {
 			this.nativePinger.Delete(key)
 
 			pinger.mutex.Lock()
-			// if there was an error dont count the packet
-			if pinger.timestampSend > 0 && pinger.timestampRecv != -1 && (pinger.timestampRecv == 0 || pinger.timestampSend <= pinger.timestampRecv) {
+
+			// Things like failed arp cause tx failures on sockets, so mark those as failed pings
+			if pinger.timestampSend == 0 || pinger.timestampSend == -1 {
+				// Increment sent packets counter
+				txPackets.Inc()
+
+				pinger.probe.AddSample(PingResult{
+					Success:      false,
+					RountripTime: 0,
+					Timestamp:    pinger.timestampStart,
+				})
+			} else if pinger.timestampSend > 0 && pinger.timestampRecv != -1 && (pinger.timestampRecv == 0 || pinger.timestampSend <= pinger.timestampRecv) {
 				// Increment sent packets counter
 				txPackets.Inc()
 
@@ -224,6 +234,8 @@ func (this *ICMPNative) timeoutThread() {
 					})
 				}
 			} else {
+				// if there was an error dont count the packet
+				// fmt.Println(pinger.timestampSend, pinger.timestampRecv, pinger.probe.IPAddress)
 				erPackets.Inc()
 			}
 			pinger.mutex.Unlock()
@@ -267,56 +279,67 @@ func (this *ICMPNative) transmitThread() {
 				this.nextPacket = now.Add(time.Millisecond * -10)
 			}
 
-			var x nativePinger
-			x.timestampStart = time.Now()
-			x.probe = probes[idx]
+			var pinger nativePinger
+			pinger.timestampStart = time.Now()
+			pinger.probe = probes[idx]
 
-			this.nativePinger.Set(id, &x)
+			this.nativePinger.Set(id, &pinger)
 
-			if IsIPv4(x.probe.IPAddress) {
+			if IsIPv4(pinger.probe.IPAddress) {
 				if this.socket4 > 0 {
-					x.packet = IcmpPacket{
+					pinger.packet = IcmpPacket{
 						Type:           8,
 						Code:           0,
 						Identifier:     this.identifier,
 						SequenceNumber: SequenceNumber,
 						Payload:        make([]byte, len(payload)),
 					}
-					copy(x.packet.Payload, payload)
-					WriteUint64(x.packet.Payload, 0, id)
+					copy(pinger.packet.Payload, payload)
+					WriteUint64(pinger.packet.Payload, 0, id)
 
-					n := x.packet.Serialize4(buf)
-					address := syscall.SockaddrInet4{Addr: Ipv4ToBytes(x.probe.IPAddress)}
+					n := pinger.packet.Serialize4(buf)
+					address := syscall.SockaddrInet4{Addr: Ipv4ToBytes(pinger.probe.IPAddress)}
+					pinger.mutex.Lock()
 					if err := syscall.Sendto(this.socket4, buf[:n], 0, &address); err != nil {
-						panic(err)
+						switch err {
+						case syscall.ENETUNREACH: // network is unreachable
+						case syscall.EHOSTUNREACH: // host is unreachable
+						case syscall.EACCES: // things like arp failed at L2 ( permission denied )
+							pinger.timestampSend = -1
+							break
+						default:
+							panic(err)
+						}
 					}
+					pinger.mutex.Unlock()
 				}
 			} else {
 				if this.socket6 > 0 {
-					x.packet = IcmpPacket{
+					pinger.packet = IcmpPacket{
 						Type:           128,
 						Code:           0,
 						Identifier:     this.identifier,
 						SequenceNumber: SequenceNumber,
 						Payload:        make([]byte, len(payload)),
 					}
-					copy(x.packet.Payload, payload)
-					WriteUint64(x.packet.Payload, 0, id)
+					copy(pinger.packet.Payload, payload)
+					WriteUint64(pinger.packet.Payload, 0, id)
 
-					n := x.packet.Serialize6(buf)
-					address := syscall.SockaddrInet6{Addr: Ipv6ToBytes(x.probe.IPAddress)}
+					n := pinger.packet.Serialize6(buf)
+					address := syscall.SockaddrInet6{Addr: Ipv6ToBytes(pinger.probe.IPAddress)}
+					pinger.mutex.Lock()
 					if err := syscall.Sendto(this.socket6, buf[:n], 0, &address); err != nil {
 						switch err {
 						case syscall.ENETUNREACH: // network is unreachable
 						case syscall.EHOSTUNREACH: // host is unreachable
-							x.mutex.Lock()
-							x.timestampSend = -1
-							x.mutex.Unlock()
+						case syscall.EACCES: // things like arp failed at L2 ( permission denied )
+							pinger.timestampSend = -1
 							break
 						default:
 							panic(err)
 						}
 					}
+					pinger.mutex.Unlock()
 				}
 			}
 		}
