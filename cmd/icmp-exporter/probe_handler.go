@@ -202,6 +202,8 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	var sumRTT2 int64 = 0
 	var bestRTT int64 = 0
 	var bestLoss int = 0
+	var bestSumRTT int64 = 0
+	var bestSumRTT2 int64 = 0
 	var lastResult *PingResult
 	for n := range results {
 		r := &results[len(results)-1-n]
@@ -227,6 +229,8 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 				maxIndex = n
 				bestRTT = sumRTT
 				bestLoss = b
+				bestSumRTT = sumRTT
+				bestSumRTT2 = sumRTT2
 				lastResult = r
 			}
 		}
@@ -239,6 +243,8 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	if maxIndex == len(results) {
 		bestLoss = b
 		bestRTT = sumRTT
+		bestSumRTT = sumRTT
+		bestSumRTT2 = sumRTT2
 	}
 	if lastResult != nil && maxIndex >= 100 {
 		job.Mutex.Lock()
@@ -257,8 +263,8 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 
 	// mean = sum_x / n
 	// stdev = sqrt((sum_x2 / n) - (mean * mean))
-	mean := (float64(sumRTT) / 1000000.0) / float64(maxIndex)
-	mean2 := (float64(sumRTT2) / (1000000.0 * 1000000.0)) / float64(maxIndex)
+	mean := (float64(bestSumRTT) / 1000000.0) / float64(maxIndex)
+	mean2 := (float64(bestSumRTT2) / (1000000.0 * 1000000.0)) / float64(maxIndex)
 	probeDeviation.WithLabelValues(labels...).Set(math.Sqrt(mean2 - mean*mean))
 
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})

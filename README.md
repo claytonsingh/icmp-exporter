@@ -119,6 +119,34 @@ CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/icmp-exporter-amd64 ./cmd/
 ```
 
 # Metrics
+### Loss
+Loss over the last `icmp_probe_samples_count`.
+```
+icmp_probe_loss_ratio{}
+```
+
+Loss over time
+```
+1 - increase(icmp_probe_packets_recv_total{}[10m]) / increase(icmp_probe_packets_sent_total{}[10m])
+```
+
+### Latency
+Latency over the last `icmp_probe_samples_count`
+```
+icmp_probe_latency_seconds{}
+```
+
+Latency over time
+```
+increase(icmp_probe_latency_seconds_total{}[10m]) / increase(icmp_probe_packets_recv_total{}[10m])
+```
+
+### Standard deviation
+Standard deviation over the last `icmp_probe_samples_count`
+```
+icmp_probe_standard_deviation_seconds{}
+```
+
 Standard deviation over time
 ```
 sqrt(
