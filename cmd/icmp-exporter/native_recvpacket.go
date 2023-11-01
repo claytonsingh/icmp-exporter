@@ -14,11 +14,11 @@ func recvpacket_v4(fd int, data []byte, recvmsg_flags int32, timestamp_type int)
 	result = (int)(C.recvpacket_v4(C.int32_t(fd), (*C.uint8_t)(unsafe.Pointer(&name[0])), (*C.uint8_t)(unsafe.Pointer(&data[0])), C.uint32_t(len(data)), (*C.int64_t)(unsafe.Pointer(&u_seconds)), C.int32_t(recvmsg_flags), C.int32_t(timestamp_type)))
 
 	switch int(name[0]) | (int(name[1]) << 8) {
-	case 0x0002:
+	case C.AF_INET:
 		address = make(net.IP, 4)
 		copy(address[:], name[4:4+4])
 		break
-	case 0x000A:
+	case C.AF_INET6:
 		address = make(net.IP, 16)
 		copy(address[:], name[8:8+16])
 		break

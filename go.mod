@@ -1,6 +1,6 @@
 module github.com/claytonsingh/icmp-exporter
 
-go 1.19
+go 1.21
 
 require (
 	github.com/abursavich/nett v0.0.0-20150117192851-f31118c7aeb9
