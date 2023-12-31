@@ -1,0 +1,66 @@
+[
+  {
+    "id": "network:0",
+    "class": "network",
+    "claimed": true,
+    "handle": "PCI:0000:03:00.0",
+    "description": "Ethernet interface",
+    "product": "82599ES 10-Gigabit SFI/SFP+ Network Connection",
+    "vendor": "Intel Corporation",
+    "physid": "0",
+    "businfo": "pci@0000:03:00.0",
+    "logicalname": "ens255f0",
+    "version": "01",
+    "serial": "02:c4:97:28:97:5a",
+    "units": "bit/s",
+    "size": 10000000000,
+    "capacity": 10000000000,
+    "width": 64,
+    "clock": 33000000,
+    "configuration": {
+      "autonegotiation": "off",
+      "broadcast": "yes",
+      "driver": "ixgbe",
+      "driverversion": "5.1.0-k",
+      "duplex": "full",
+      "firmware": "0x800004e0, 1.808.0",
+      "latency": "0",
+      "link": "yes",
+      "multicast": "yes",
+      "port": "fibre",
+      "slave": "yes",
+      "speed": "10Gbit/s"
+    },
+    "capabilities": {
+      "pm": "Power Management",
+      "msi": "Message Signalled Interrupts",
+      "msix": "MSI-X",
+      "pciexpress": "PCI Express",
+      "vpd": "Vital Product Data",
+      "bus_master": "bus mastering",
+      "cap_list": "PCI capabilities listing",
+      "rom": "extension ROM",
+      "ethernet": true,
+      "physical": "Physical interface",
+      "fibre": "optical fibre",
+      "10000bt-fd": "10Gbit/s (full duplex)"
+    }
+  }
+]
+Time stamping parameters for ens255f0:
+Capabilities:
+        hardware-transmit     (SOF_TIMESTAMPING_TX_HARDWARE)
+        software-transmit     (SOF_TIMESTAMPING_TX_SOFTWARE)
+        hardware-receive      (SOF_TIMESTAMPING_RX_HARDWARE)
+        software-receive      (SOF_TIMESTAMPING_RX_SOFTWARE)
+        software-system-clock (SOF_TIMESTAMPING_SOFTWARE)
+        hardware-raw-clock    (SOF_TIMESTAMPING_RAW_HARDWARE)
+PTP Hardware Clock: 3
+Hardware Transmit Timestamp Modes:
+        off                   (HWTSTAMP_TX_OFF)
+        on                    (HWTSTAMP_TX_ON)
+Hardware Receive Filter Modes:
+        none                  (HWTSTAMP_FILTER_NONE)
+        ptpv1-l4-sync         (HWTSTAMP_FILTER_PTP_V1_L4_SYNC)
+        ptpv1-l4-delay-req    (HWTSTAMP_FILTER_PTP_V1_L4_DELAY_REQ)
+        ptpv2-event           (HWTSTAMP_FILTER_PTP_V2_EVENT)

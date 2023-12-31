@@ -104,6 +104,7 @@ Hardware Receive Filter Modes:
 | Card/Chipset        | Status Software    | Status Hardware    | Notes
 |---------------------|--------------------|--------------------|--------
 | Intel X550          | :heavy_check_mark: | :heavy_check_mark: | Tested
+| Intel I350          | :heavy_check_mark: | :heavy_check_mark: | Tested
 | Intel e1000         | :heavy_check_mark: | :x:                | Tested
 | KVM Virtio          | :heavy_check_mark: | :x:                | Tested
 | Vmware vmxnet3      | :x:                | :x:                | Needs driver support, use e1000

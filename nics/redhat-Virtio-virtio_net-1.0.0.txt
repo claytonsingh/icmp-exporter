@@ -1,0 +1,59 @@
+[
+  {
+    "id": "network:1",
+    "class": "network",
+    "claimed": true,
+    "handle": "PCI:0000:00:12.0",
+    "description": "Ethernet controller",
+    "product": "Virtio network device",
+    "vendor": "Red Hat, Inc.",
+    "physid": "12",
+    "businfo": "pci@0000:00:12.0",
+    "version": "00",
+    "width": 64,
+    "clock": 33000000,
+    "configuration": {
+      "driver": "virtio-pci",
+      "latency": "0"
+    },
+    "capabilities": {
+      "msix": "MSI-X",
+      "bus_master": "bus mastering",
+      "cap_list": "PCI capabilities listing",
+      "rom": "extension ROM"
+    },
+    "children": [
+      {
+        "id": "virtio2",
+        "class": "network",
+        "disabled": true,
+        "claimed": true,
+        "description": "Ethernet interface",
+        "physid": "0",
+        "businfo": "virtio@2",
+        "logicalname": "ens18",
+        "serial": "ca:f6:ca:31:a2:65",
+        "configuration": {
+          "autonegotiation": "off",
+          "broadcast": "yes",
+          "driver": "virtio_net",
+          "driverversion": "1.0.0",
+          "link": "no",
+          "multicast": "yes"
+        },
+        "capabilities": {
+          "ethernet": true,
+          "physical": "Physical interface"
+        }
+      }
+    ]
+  }
+]
+Time stamping parameters for ens18:
+Capabilities:
+        software-transmit     (SOF_TIMESTAMPING_TX_SOFTWARE)
+        software-receive      (SOF_TIMESTAMPING_RX_SOFTWARE)
+        software-system-clock (SOF_TIMESTAMPING_SOFTWARE)
+PTP Hardware Clock: none
+Hardware Transmit Timestamp Modes: none
+Hardware Receive Filter Modes: none

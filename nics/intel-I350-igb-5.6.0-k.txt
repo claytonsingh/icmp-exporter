@@ -1,0 +1,63 @@
+[
+  {
+    "id": "network:0",
+    "class": "network",
+    "claimed": true,
+    "handle": "PCI:0000:01:00.0",
+    "description": "Ethernet interface",
+    "product": "I350 Gigabit Network Connection",
+    "vendor": "Intel Corporation",
+    "physid": "0",
+    "businfo": "pci@0000:01:00.0",
+    "logicalname": "eno1",
+    "version": "01",
+    "serial": "d8:c4:97:47:cd:46",
+    "units": "bit/s",
+    "capacity": 1000000000,
+    "width": 32,
+    "clock": 33000000,
+    "configuration": {
+      "autonegotiation": "on",
+      "broadcast": "yes",
+      "driver": "igb",
+      "driverversion": "5.6.0-k",
+      "firmware": "1.63, 0x800009fa",
+      "latency": "0",
+      "link": "no",
+      "multicast": "yes",
+      "port": "twisted pair"
+    },
+    "capabilities": {
+      "pm": "Power Management",
+      "msi": "Message Signalled Interrupts",
+      "msix": "MSI-X",
+      "pciexpress": "PCI Express",
+      "bus_master": "bus mastering",
+      "cap_list": "PCI capabilities listing",
+      "ethernet": true,
+      "physical": "Physical interface",
+      "tp": "twisted pair",
+      "10bt": "10Mbit/s",
+      "10bt-fd": "10Mbit/s (full duplex)",
+      "100bt": "100Mbit/s",
+      "100bt-fd": "100Mbit/s (full duplex)",
+      "1000bt-fd": "1Gbit/s (full duplex)",
+      "autonegotiation": "Auto-negotiation"
+    }
+  }
+]
+Time stamping parameters for eno1:
+Capabilities:
+        hardware-transmit     (SOF_TIMESTAMPING_TX_HARDWARE)
+        software-transmit     (SOF_TIMESTAMPING_TX_SOFTWARE)
+        hardware-receive      (SOF_TIMESTAMPING_RX_HARDWARE)
+        software-receive      (SOF_TIMESTAMPING_RX_SOFTWARE)
+        software-system-clock (SOF_TIMESTAMPING_SOFTWARE)
+        hardware-raw-clock    (SOF_TIMESTAMPING_RAW_HARDWARE)
+PTP Hardware Clock: 0
+Hardware Transmit Timestamp Modes:
+        off                   (HWTSTAMP_TX_OFF)
+        on                    (HWTSTAMP_TX_ON)
+Hardware Receive Filter Modes:
+        none                  (HWTSTAMP_FILTER_NONE)
+        all                   (HWTSTAMP_FILTER_ALL)
