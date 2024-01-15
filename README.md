@@ -49,13 +49,12 @@ systemctl enable icmp-exporter.service
 # URL parameters
 ```
 target
-        The ip or hostname you want to ping
+        The ip or hostname you want to ping. Can be repeated.
 ip_version
-        What version of ip you want to use when resolving dns records, defaults to 46
-        4 for ipv4 only lookup
-        6 for ipv6 only lookup
-        46 for ipv4 lookup then ipv6
-        64 for ipv6 lookup then ipv4
+        What version of ip you want to use when resolving dns records, defaults to all.
+        `4`: to resolve only ipv4 addresses
+        `6`: to resolve only ipv6 addresses
+        `all`: to resolve both ipv4 and ipv6 addresses
 ```
 
 # Prometheus example configuration

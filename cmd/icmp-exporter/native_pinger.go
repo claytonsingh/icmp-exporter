@@ -263,7 +263,7 @@ func (this *ICMPNative) transmitThread() {
 			interpacketDuration = this.minInterval
 		}
 
-		for idx := range probes {
+		for _, probe := range probes {
 			id = id + 1
 
 			this.nextPacket = this.nextPacket.Add(interpacketDuration)
@@ -281,12 +281,11 @@ func (this *ICMPNative) transmitThread() {
 
 			var pinger nativePinger
 			pinger.timestampStart = time.Now()
-			pinger.probe = probes[idx]
-
-			this.nativePinger.Set(id, &pinger)
+			pinger.probe = probe
 
 			if IsIPv4(pinger.probe.IPAddress) {
 				if this.socket4 > 0 {
+					this.nativePinger.Set(id, &pinger)
 					pinger.packet = IcmpPacket{
 						Type:           8,
 						Code:           0,
@@ -315,6 +314,7 @@ func (this *ICMPNative) transmitThread() {
 				}
 			} else {
 				if this.socket6 > 0 {
+					this.nativePinger.Set(id, &pinger)
 					pinger.packet = IcmpPacket{
 						Type:           128,
 						Code:           0,
