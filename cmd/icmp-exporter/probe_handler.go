@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"net"
 	"net/http"
+	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -29,6 +31,16 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If limit header is set then use that if its less then 256
+	// If the limit header is not a number then the limit is 0
+	limit := 256
+	for _, lim := range r.Header.Values("x-target-limit") {
+		lim, _ := strconv.Atoi(lim)
+		if lim < limit {
+			limit = lim
+		}
+	}
+
 	// Loop over each target and add the resolved ips to targets
 	for _, target := range params["target"] {
 		ip := net.ParseIP(target)
@@ -50,21 +62,26 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 						targets[string(ip)] = ip
 					}
 				}
-				break
 			case "6":
 				for _, ip := range addresses {
 					if IsIPv6(ip) && ip.IsGlobalUnicast() {
 						targets[string(ip)] = ip
 					}
 				}
-				break
 			default:
 				for _, ip := range addresses {
 					if ip.IsGlobalUnicast() {
 						targets[string(ip)] = ip
 					}
 				}
-				break
+			}
+
+			// Exit early if we have exceed the limit
+			if len(targets) > limit {
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write(([]byte)("# 400 - too many targets"))
+				return
 			}
 		}
 	}
@@ -219,6 +236,7 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 		probeDeviation.WithLabelValues(labels...).Set(math.Sqrt(mean2 - mean*mean))
 	}
 
+	w.Header().Set("x-target-count", fmt.Sprintf("%d", len(targets)))
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 	h.ServeHTTP(w, r)
 }
