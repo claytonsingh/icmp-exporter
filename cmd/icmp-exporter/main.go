@@ -95,7 +95,7 @@ func parseArguments() Settings {
 		identifier:       0,
 	}
 
-	i_will_be_good := flag.Bool("i-wont-be-evil", false, "Unlocks advanced settings.")
+	iWillBeGood := flag.Bool("i-wont-be-evil", false, "Unlocks advanced settings.")
 	flag.StringVar(&settings.iface4, "interface4", defaults.iface4, "IPv4 interface to bind to. If \"auto\" then the default route is used.")
 	flag.StringVar(&settings.iface6, "interface6", defaults.iface6, "IPv6 interface to bind to. If \"auto\" then the default route is used.")
 	flag.BoolVar(&settings.useHardware, "hard", defaults.useHardware, "Use hardware timestamping.")
@@ -129,7 +129,7 @@ func parseArguments() Settings {
 		errors = append(errors, "interface4 and interface6 is not set")
 	}
 
-	if *i_will_be_good {
+	if *iWillBeGood {
 		if settings.timeout < 10 {
 			errors = append(errors, "timeout must be 10 or more")
 		}
@@ -201,19 +201,19 @@ func main() {
 }
 
 func GetProbe(ip net.IP) (*PingProbe, bool) {
-	var ip_bytes [16]byte
+	var ipBytes [16]byte
 	ip = ip.To16()
-	copy(ip_bytes[:], ip[:])
+	copy(ipBytes[:], ip[:])
 	now := time.Now()
-	if untyped, ok := probeMap.Load(ip_bytes); ok {
+	if untyped, ok := probeMap.Load(ipBytes); ok {
 		probe := untyped.(*PingProbe)
 		probe.Mutex.Lock()
 		probe.LastAccess = now
 		probe.Mutex.Unlock()
 		return probe, false
 	} else {
-		new := &PingProbe{IPAddress: ip_bytes[:], Results: NewDataBuff[PingResult](250), LastAccess: now}
-		untyped, _ := probeMap.LoadOrStore(ip_bytes, new)
+		new := &PingProbe{IPAddress: ipBytes[:], Results: NewDataBuff[PingResult](250), LastAccess: now}
+		untyped, _ := probeMap.LoadOrStore(ipBytes, new)
 		probe := untyped.(*PingProbe)
 		if probe == new {
 			signal.Signal()
@@ -226,7 +226,7 @@ func GetProbe(ip net.IP) (*PingProbe, bool) {
 	}
 }
 
-// Clean out old jobs
+// PruneMapThread cleans out old jobs
 func PruneMapThread() {
 	for {
 		time.Sleep(1 * time.Second)
