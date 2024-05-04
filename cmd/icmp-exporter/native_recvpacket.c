@@ -2,18 +2,21 @@
 
 static int64_t get_timestamp(struct msghdr *msg, int32_t timestamp_type)
 {
-	for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg))
+	if (timestamp_type >= 0 && timestamp_type < 3)
 	{
-		if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SO_TIMESTAMPING && timestamp_type >= 0 && timestamp_type < 3)
+		for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg))
 		{
-			struct timespec* stamp = (struct timespec *)CMSG_DATA(cmsg);
-			// printf("SO_TIMESTAMPING ");
-			// printf("SW %ld.%09ld ",             (long)stamp[0].tv_sec, (long)stamp[0].tv_nsec);
-			// printf("HW transformed %ld.%09ld ", (long)stamp[1].tv_sec, (long)stamp[1].tv_nsec);
-			// printf("HW raw %ld.%09ld",          (long)stamp[2].tv_sec, (long)stamp[2].tv_nsec);
-			// printf("\n");
-			long u_seconds = (long)stamp[timestamp_type].tv_sec * 1000000 + (long)stamp[timestamp_type].tv_nsec / 1000;
-			return u_seconds & 0x7FFFFFFFFFFFFFFF;
+			if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SO_TIMESTAMPING)
+			{
+				struct timespec* stamp = (struct timespec *)CMSG_DATA(cmsg);
+				// printf("SO_TIMESTAMPING ");
+				// printf("SW %ld.%09ld ",             (long)stamp[0].tv_sec, (long)stamp[0].tv_nsec);
+				// printf("HW transformed %ld.%09ld ", (long)stamp[1].tv_sec, (long)stamp[1].tv_nsec);
+				// printf("HW raw %ld.%09ld",          (long)stamp[2].tv_sec, (long)stamp[2].tv_nsec);
+				// printf("\n");
+				long u_seconds = (long)stamp[timestamp_type].tv_sec * 1000000 + (long)stamp[timestamp_type].tv_nsec / 1000;
+				return u_seconds & 0x7FFFFFFFFFFFFFFF;
+			}
 		}
 	}
 	return -1;
