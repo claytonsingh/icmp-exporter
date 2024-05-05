@@ -3,8 +3,25 @@ on:
     tags: 'v*'
 
 jobs:
-  releases-matrix:
+  release-create:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set Env
+      run: |
+        echo "RELEASE_NAME=${GITHUB_REF_NAME} / $(git show -s --format=%cs)" >> ${GITHUB_ENV}
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        draft: true
+        name: "${{ env.RELEASE_NAME }}"
+        generate_release_notes: true
+  release-matrix:
     name: Release Go Binary
+    needs: [release-create]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -22,7 +39,6 @@ jobs:
       run: |
         echo "PACKAGE_NAME=icmp-exporter-${{ matrix.goos }}-${{ matrix.arch }}" >> ${GITHUB_ENV}
         echo "VERSION_STRING=$(git show -s --format=%cs) ${GITHUB_REF_NAME} ${GITHUB_SHA}" >> ${GITHUB_ENV}
-        echo "RELEASE_NAME=${GITHUB_REF_NAME} / $(git show -s --format=%cs)" >> ${GITHUB_ENV}
     - uses: docker/setup-qemu-action@v2
     - name: Build Release
       run: |
@@ -37,9 +53,6 @@ jobs:
         ${{ matrix.image }} \
         .github/build.sh
     - name: Upload Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
         files: "${{ env.PACKAGE_NAME }}.tar.gz"
-        draft: true
-        name: "${{ env.RELEASE_NAME }}"
