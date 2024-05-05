@@ -14,11 +14,9 @@ jobs:
       run: |
         echo "RELEASE_NAME=${GITHUB_REF_NAME} / $(git show -s --format=%cs)" >> ${GITHUB_ENV}
     - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        draft: true
-        name: "${{ env.RELEASE_NAME }}"
-        generate_release_notes: true
+      run: gh release create "${GITHUB_REF_NAME}" --title "${{ env.RELEASE_NAME }}" --generate-notes --draft
+      env:
+        GITHUB_TOKEN: ${{ github.TOKEN }}
   release-matrix:
     name: Release Go Binary
     needs: [release-create]
