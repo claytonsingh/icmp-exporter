@@ -13,7 +13,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/net/bpf"
-	"golang.org/x/sys/unix"
 	syscall "golang.org/x/sys/unix"
 )
 
@@ -68,12 +67,12 @@ type ICMPNative struct {
 	minInterval    time.Duration
 }
 
-func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, interval int, max_pps int, identifier uint16) *ICMPNative {
+func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, interval int, maxPps int, identifier uint16) *ICMPNative {
 	var this ICMPNative
 	this.nativePinger = NewSafeOrderedMap[uint64, *nativePinger]()
 	this.timeout = time.Duration(timeout) * time.Millisecond
 	this.interval = time.Duration(interval) * time.Millisecond
-	this.minInterval = time.Duration(float64(time.Second) / float64(max_pps))
+	this.minInterval = time.Duration(float64(time.Second) / float64(maxPps))
 	this.interface4 = iface4
 	this.interface6 = iface6
 
@@ -305,7 +304,6 @@ func (this *ICMPNative) transmitThread() {
 						case syscall.EHOSTUNREACH: // host is unreachable
 						case syscall.EACCES: // things like arp failed at L2 ( permission denied )
 							pinger.timestampSend = -1
-							break
 						default:
 							panic(err)
 						}
@@ -334,7 +332,6 @@ func (this *ICMPNative) transmitThread() {
 						case syscall.EHOSTUNREACH: // host is unreachable
 						case syscall.EACCES: // things like arp failed at L2 ( permission denied )
 							pinger.timestampSend = -1
-							break
 						default:
 							panic(err)
 						}
@@ -359,7 +356,7 @@ func (this *ICMPNative) receiveThread(sock int) {
 	parser6.IgnoreUnsupported = true
 
 	data := make([]byte, syscall.Getpagesize())
-	for true {
+	for {
 		ip, ndata, ts := recvpacket_v4(sock, data, 0, this.timestampType)
 		if ndata < 0 {
 			panic(ndata)
@@ -429,11 +426,11 @@ func (this *ICMPNative) errorThread(sock int) {
 	parser.IgnoreUnsupported = true
 
 	data := make([]byte, syscall.Getpagesize())
-	for true {
-		_, ndata, ts := recvpacket_v4(sock, data, unix.MSG_ERRQUEUE|unix.MSG_DONTWAIT, this.timestampType)
+	for {
+		_, ndata, ts := recvpacket_v4(sock, data, syscall.MSG_ERRQUEUE|syscall.MSG_DONTWAIT, this.timestampType)
 		if ndata == -1 {
-			fds := []unix.PollFd{{Fd: int32(sock), Events: unix.POLLERR}}
-			unix.Poll(fds, 2100)
+			fds := []syscall.PollFd{{Fd: int32(sock), Events: syscall.POLLERR}}
+			syscall.Poll(fds, 2100)
 			continue
 		} else if ndata < 0 {
 			panic(ndata)
@@ -477,6 +474,7 @@ func (this *ICMPNative) errorThread(sock int) {
 	}
 }
 
+//lint:ignore ST1003 match c api
 func socket_set_flags(fd int, so_timestamping_flags int, so_timestamp int, so_timestampns int) error {
 
 	if so_timestamp > 0 {

@@ -28,7 +28,7 @@ var (
 	requestMethods = map[string]bool{"get": true, "put": true, "post": true, "delete": true, "connect": true, "options": true, "notify": true, "trace": true, "patch": true}
 )
 
-// Handler returns an measuring standard http.Handler.
+// PromtheusMiddlewareHandler returns an measuring standard http.Handler.
 func PromtheusMiddlewareHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		wp := &ResponseWriterProxy{

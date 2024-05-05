@@ -9,8 +9,8 @@ import (
 	syscall "golang.org/x/sys/unix"
 )
 
+// BpfFilter represents a classic BPF filter program that can be applied to a socket
 // https://riyazali.net/posts/berkeley-packet-filter-in-golang/
-// Filter represents a classic BPF filter program that can be applied to a socket
 type BpfFilter []bpf.Instruction
 
 // ApplyTo sets the filter on the provided file descriptor

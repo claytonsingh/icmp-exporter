@@ -44,7 +44,7 @@ func GetDefaultRouterInterface4() (string, error) {
 			return fields[0], nil // interface name
 		}
 	}
-	return "", errors.New("No default route")
+	return "", errors.New("no default route")
 }
 
 func GetDefaultRouterInterface6() (string, error) {
@@ -86,5 +86,5 @@ func GetDefaultRouterInterface6() (string, error) {
 			return fields[9], nil // interface name
 		}
 	}
-	return "", errors.New("No default route")
+	return "", errors.New("no default route")
 }

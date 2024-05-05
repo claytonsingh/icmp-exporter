@@ -11,7 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// Get the weight for this sample
+// W gets the weight for this sample
 func W(n int, l int) float32 {
 	if n < 25 || l-n < 25 {
 		return 0
