@@ -1,0 +1,62 @@
+[
+  {
+    "id": "network",
+    "class": "network",
+    "claimed": true,
+    "description": "Ethernet interface",
+    "physid": "1",
+    "businfo": "pci@0000:1e:00.0",
+    "logicalname": "enp30s0d1",
+    "serial": "1c:34:da:dc:81:a1",
+    "units": "bit/s",
+    "size": 1000000000,
+    "capacity": 10000000000,
+    "configuration": {
+      "autonegotiation": "off",
+      "broadcast": "yes",
+      "driver": "mlx4_en",
+      "driverversion": "4.0-0",
+      "duplex": "full",
+      "firmware": "2.42.5000",
+      "link": "yes",
+      "multicast": "yes",
+      "port": "fibre",
+      "speed": "1Gbit/s"
+    },
+    "capabilities": {
+      "ethernet": true,
+      "physical": "Physical interface",
+      "fibre": "optical fibre",
+      "1000bt-fd": "1Gbit/s (full duplex)",
+      "10000bt-fd": "10Gbit/s (full duplex)"
+    }
+  }
+]
+Time stamping parameters for enp30s0d1:
+Capabilities:
+        hardware-transmit     (SOF_TIMESTAMPING_TX_HARDWARE)
+        software-transmit     (SOF_TIMESTAMPING_TX_SOFTWARE)
+        hardware-receive      (SOF_TIMESTAMPING_RX_HARDWARE)
+        software-receive      (SOF_TIMESTAMPING_RX_SOFTWARE)
+        software-system-clock (SOF_TIMESTAMPING_SOFTWARE)
+        hardware-raw-clock    (SOF_TIMESTAMPING_RAW_HARDWARE)
+PTP Hardware Clock: 0
+Hardware Transmit Timestamp Modes:
+        off                   (HWTSTAMP_TX_OFF)
+        on                    (HWTSTAMP_TX_ON)
+Hardware Receive Filter Modes:
+        none                  (HWTSTAMP_FILTER_NONE)
+        all                   (HWTSTAMP_FILTER_ALL)
+
+
+Notes:
+When timestamping is enabled the network port flaps
+
+/var/log/syslog
+May  5 21:44:13 ubuntu-server kernel: [ 1844.233406] mlx4_en: enp30s0d1: Turning off RX vlan offload since RX time-stamping is ON
+May  5 21:44:13 ubuntu-server kernel: [ 1844.244081] mlx4_en: enp30s0d1: Steering Mode 1
+May  5 21:44:13 ubuntu-server kernel: [ 1844.265009] mlx4_en: enp30s0d1: Link Down
+May  5 21:44:13 ubuntu-server systemd-networkd[5879]: enp30s0d1: Lost carrier
+May  5 21:44:13 ubuntu-server systemd-timesyncd[1316]: No network connectivity, watching for changes.
+May  5 21:44:17 ubuntu-server kernel: [ 1848.665771] mlx4_en: enp30s0d1: Link Up
+May  5 21:44:17 ubuntu-server systemd-networkd[5879]: enp30s0d1: Gained carrier

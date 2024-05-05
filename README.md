@@ -100,17 +100,17 @@ Hardware Receive Filter Modes:
 ```
 
 ## Known network cards
-| Card/Chipset        | Status Software    | Status Hardware    | Notes
-|---------------------|--------------------|--------------------|--------
-| Intel X550          | :heavy_check_mark: | :heavy_check_mark: | Tested
-| Intel I350          | :heavy_check_mark: | :heavy_check_mark: | Tested
-| Intel e1000         | :heavy_check_mark: | :x:                | Tested
-| KVM Virtio          | :heavy_check_mark: | :x:                | Tested
-| Vmware vmxnet3      | :x:                | :x:                | Needs driver support, use e1000
-| Mellanox connectx-3 | :grey_question:    | :grey_question:    | Should work, not tested
-| Mellanox connectx-4 | :grey_question:    | :grey_question:    | Should work, not tested
-| Mellanox connectx-5 | :grey_question:    | :grey_question:    | Should work, not tested
-| Mellanox connectx-6 | :grey_question:    | :grey_question:    | Should work, not tested
+| Card/Chipset                  | Status Software    | Status Hardware    | Notes
+|-------------------------------|--------------------|--------------------|--------
+| Intel X550                    | :heavy_check_mark: | :heavy_check_mark: | Tested
+| Intel I350                    | :heavy_check_mark: | :heavy_check_mark: | Tested
+| Intel e1000                   | :heavy_check_mark: | :x:                | Tested
+| KVM Virtio                    | :heavy_check_mark: | :x:                | Tested
+| Vmware vmxnet3                | :x:                | :x:                | Needs driver support, use e1000
+| Mellanox connectx-3 (MT27500) | :heavy_check_mark: | :heavy_check_mark: | Tested, port flaps when timestamping is enabled
+| Mellanox connectx-4           | :grey_question:    | :grey_question:    | Should work, not tested
+| Mellanox connectx-5           | :grey_question:    | :grey_question:    | Should work, not tested
+| Mellanox connectx-6           | :grey_question:    | :grey_question:    | Should work, not tested
 
 # Building
 Assuming you have golang setup
