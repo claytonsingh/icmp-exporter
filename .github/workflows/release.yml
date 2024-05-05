@@ -9,7 +9,7 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set Env
       run: |
         echo "RELEASE_NAME=${GITHUB_REF_NAME} / $(git show -s --format=%cs)" >> ${GITHUB_ENV}
@@ -34,12 +34,12 @@ jobs:
           - { goos: "linux", goarch: "arm",   arch: "arm32v7", image: "arm32v7/golang:bullseye" }
           - { goos: "linux", goarch: "arm",   arch: "arm32v5", image: "arm32v5/golang:bullseye" }
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set Env
       run: |
         echo "PACKAGE_NAME=icmp-exporter-${{ matrix.goos }}-${{ matrix.arch }}" >> ${GITHUB_ENV}
         echo "VERSION_STRING=$(git show -s --format=%cs) ${GITHUB_REF_NAME} ${GITHUB_SHA}" >> ${GITHUB_ENV}
-    - uses: docker/setup-qemu-action@v2
+    - uses: docker/setup-qemu-action@v3
     - name: Build Release
       run: |
         docker run --rm \
