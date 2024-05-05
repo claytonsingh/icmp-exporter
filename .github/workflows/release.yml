@@ -53,6 +53,6 @@ jobs:
         ${{ matrix.image }} \
         .github/build.sh
     - name: Upload Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: "${{ env.PACKAGE_NAME }}.tar.gz"
+      run: gh release upload "${GITHUB_REF_NAME}" "${{ env.PACKAGE_NAME }}.tar.gz"
+      env:
+        GITHUB_TOKEN: ${{ github.TOKEN }}
