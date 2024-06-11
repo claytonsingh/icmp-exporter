@@ -26,11 +26,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - { goos: "linux", goarch: "amd64", arch: "x64",     image: "golang:bullseye" }
-          - { goos: "linux", goarch: "386",   arch: "x86",     image: "i386/golang:bullseye" }
-          - { goos: "linux", goarch: "arm64", arch: "arm64v8", image: "arm64v8/golang:bullseye" }
-          - { goos: "linux", goarch: "arm",   arch: "arm32v7", image: "arm32v7/golang:bullseye" }
-          - { goos: "linux", goarch: "arm",   arch: "arm32v5", image: "arm32v5/golang:bullseye" }
+          - { goos: "linux", goarch: "amd64",   arch: "x64",     platform: "linux/amd64",   image: "golang:bullseye" }
+          - { goos: "linux", goarch: "386",     arch: "x86",     platform: "linux/386",     image: "i386/golang:bullseye" }
+          - { goos: "linux", goarch: "arm64",   arch: "arm64v8", platform: "linux/arm64",   image: "arm64v8/golang:bullseye" }
+          - { goos: "linux", goarch: "arm",     arch: "arm32v7", platform: "linux/arm/v7",  image: "arm32v7/golang:bullseye" }
+          - { goos: "linux", goarch: "arm",     arch: "arm32v5", platform: "linux/arm/v5",  image: "arm32v5/golang:bullseye" }
+          - { goos: "linux", goarch: "riscv64", arch: "riscv64", platform: "linux/riscv64", image: "ghcr.io/claytonsingh/ubuntu-riscv-golang:latest" }
     steps:
     - uses: actions/checkout@v4
     - name: Set Env
@@ -41,6 +42,7 @@ jobs:
     - name: Build Release
       run: |
         docker run --rm \
+        --platform=${{ matrix.platform }} \
         -v $(pwd):/go/src -w /go/src \
         -e PACKAGE_NAME="${{ env.PACKAGE_NAME }}" \
         -e FLAGS="-X 'main.versionString=${{ env.VERSION_STRING }}'" \

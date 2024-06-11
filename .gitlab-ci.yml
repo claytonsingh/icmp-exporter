@@ -13,7 +13,10 @@ stages:
 build-amd64:
   tags: [docker, multiarch]
   stage: build
-  image: golang:bullseye
+  image:
+    name: golang:bullseye
+    docker:
+      platform: linux/amd64
   script:
     - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
     - CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/icmp-exporter-amd64 -ldflags="${flags}" ./cmd/icmp-exporter/
@@ -25,7 +28,10 @@ build-amd64:
 build-i386:
   tags: [docker, multiarch]
   stage: build
-  image: i386/golang:bullseye
+  image:
+    name: i386/golang:bullseye
+    docker:
+      platform: linux/386
   script:
     - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
     - CGO_ENABLED=1 GOOS=linux GOARCH=386 go build -o bin/icmp-exporter-i386 -ldflags="${flags}" ./cmd/icmp-exporter/
@@ -37,7 +43,10 @@ build-i386:
 build-arm64:
   tags: [docker, multiarch]
   stage: build
-  image: arm64v8/golang:bullseye
+  image:
+    name: arm64v8/golang:bullseye
+    docker:
+      platform: linux/arm64
   script:
     - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
     - CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -o bin/icmp-exporter-arm64 -ldflags="${flags}" ./cmd/icmp-exporter/
@@ -49,7 +58,10 @@ build-arm64:
 build-arm32:
   tags: [docker, multiarch]
   stage: build
-  image: arm32v7/golang:bullseye
+  image:
+    name: arm32v7/golang:bullseye
+    docker:
+      platform: linux/arm/v7
   script:
     - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
     - CGO_ENABLED=1 GOOS=linux GOARCH=arm go build -o bin/icmp-exporter-arm32 -ldflags="${flags}" ./cmd/icmp-exporter/
@@ -57,4 +69,18 @@ build-arm32:
     paths:
       - bin/*
     expire_in: 1 week
-    
+
+build-riscv64:
+  tags: [docker, multiarch]
+  stage: build
+  image:
+    name: ghcr.io/claytonsingh/ubuntu-riscv-golang:latest
+    docker:
+      platform: linux/riscv64
+  script:
+    - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
+    - CGO_ENABLED=1 GOOS=linux GOARCH=riscv64 go build -o bin/icmp-exporter-riscv64 -ldflags="${flags}" ./cmd/icmp-exporter/
+  artifacts:
+    paths:
+      - bin/*
+    expire_in: 1 week
