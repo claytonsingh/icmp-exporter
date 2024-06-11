@@ -107,7 +107,7 @@ Hardware Receive Filter Modes:
 | Intel e1000                   | :heavy_check_mark: | :x:                | Tested
 | KVM Virtio                    | :heavy_check_mark: | :x:                | Tested
 | Vmware vmxnet3                | :x:                | :x:                | Needs driver support, use e1000
-| Mellanox connectx-3 (MT27500) | :heavy_check_mark: | :heavy_check_mark: | Tested, port flaps when timestamping is enabled
+| Mellanox connectx-3 (MT27500) | :heavy_check_mark: | :heavy_check_mark: | Tested, port flaps when timestamping is enabled. See [nvidia time-stamping](https://docs.nvidia.com/networking/display/mlnxofedv571020/time-stamping)
 | Mellanox connectx-4           | :grey_question:    | :grey_question:    | Should work, not tested
 | Mellanox connectx-5           | :grey_question:    | :grey_question:    | Should work, not tested
 | Mellanox connectx-6           | :grey_question:    | :grey_question:    | Should work, not tested
