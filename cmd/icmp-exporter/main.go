@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/abursavich/nett"
-	"github.com/claytonsingh/syncsignal"
+	"github.com/claytonsingh/golib/syncsignal"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"kernel.org/pub/linux/libs/security/libcap/cap"
