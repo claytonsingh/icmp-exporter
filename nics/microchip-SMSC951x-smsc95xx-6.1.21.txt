@@ -1,0 +1,52 @@
+[
+  {
+    "id": "usb",
+    "class": "network",
+    "claimed": true,
+    "handle": "USB:1:3",
+    "description": "Ethernet interface",
+    "product": "SMSC9512/9514 Fast Ethernet Adapter",
+    "vendor": "Microchip Technology, Inc. (formerly SMSC)",
+    "physid": "1",
+    "businfo": "usb@1:1.1",
+    "logicalname": "eth0",
+    "version": "2.00",
+    "serial": "b8:27:eb:e3:33:94",
+    "units": "bit/s",
+    "size": 100000000,
+    "capacity": 100000000,
+    "configuration": {
+      "autonegotiation": "on",
+      "broadcast": "yes",
+      "driver": "smsc95xx",
+      "driverversion": "6.1.21+",
+      "duplex": "full",
+      "firmware": "smsc95xx USB 2.0 Ethernet",
+      "link": "yes",
+      "maxpower": "2mA",
+      "multicast": "yes",
+      "port": "twisted pair",
+      "speed": "100Mbit/s"
+    },
+    "capabilities": {
+      "usb-2.00": "USB 2.0",
+      "ethernet": true,
+      "physical": "Physical interface",
+      "tp": "twisted pair",
+      "mii": "Media Independent Interface",
+      "10bt": "10Mbit/s",
+      "10bt-fd": "10Mbit/s (full duplex)",
+      "100bt": "100Mbit/s",
+      "100bt-fd": "100Mbit/s (full duplex)",
+      "autonegotiation": "Auto-negotiation"
+    }
+  }
+]
+Time stamping parameters for eth0:
+Capabilities:
+        software-transmit
+        software-receive
+        software-system-clock
+PTP Hardware Clock: none
+Hardware Transmit Timestamp Modes: none
+Hardware Receive Filter Modes: none

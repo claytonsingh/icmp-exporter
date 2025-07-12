@@ -111,6 +111,7 @@ Hardware Receive Filter Modes:
 | Mellanox connectx-4           | :grey_question:    | :grey_question:    | Should work, not tested
 | Mellanox connectx-5           | :grey_question:    | :grey_question:    | Should work, not tested
 | Mellanox connectx-6           | :grey_question:    | :grey_question:    | Should work, not tested
+| Microchip SMSC9512/9514       | :heavy_check_mark: | :x:                | Tested (Raspberry Pi Model B Rev 2)
 
 # Building
 Assuming you have golang setup
