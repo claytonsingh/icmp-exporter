@@ -18,7 +18,6 @@ build-amd64:
     docker:
       platform: linux/amd64
   script:
-    - go mod tidy
     - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
     - CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/icmp-exporter-amd64 -ldflags="${flags}" ./cmd/icmp-exporter/
   artifacts:
@@ -34,7 +33,6 @@ build-i386:
     docker:
       platform: linux/386
   script:
-    - go mod tidy
     - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
     - CGO_ENABLED=1 GOOS=linux GOARCH=386 go build -o bin/icmp-exporter-i386 -ldflags="${flags}" ./cmd/icmp-exporter/
   artifacts:
@@ -50,7 +48,6 @@ build-arm64:
     docker:
       platform: linux/arm64
   script:
-    - go mod tidy
     - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
     - CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -o bin/icmp-exporter-arm64 -ldflags="${flags}" ./cmd/icmp-exporter/
   artifacts:
@@ -58,17 +55,16 @@ build-arm64:
       - bin/*
     expire_in: 1 week
 
-build-arm32v5:
+build-arm32v6:
   tags: [docker, multiarch]
   stage: build
   image:
-    name: arm32v5/golang:bullseye
+    name: arm32v7/golang:bullseye
     docker:
-      platform: linux/arm/v5
+      platform: linux/arm/v7
   script:
-    - go mod tidy
     - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
-    - CGO_ENABLED=1 GOOS=linux GOARCH=arm go build -o bin/icmp-exporter-arm32v5 -ldflags="${flags}" ./cmd/icmp-exporter/
+    - CGO_ENABLED=1 GOOS=linux GOARCH=arm GOARM=6 go build -o bin/icmp-exporter-arm32v6 -ldflags="${flags}" ./cmd/icmp-exporter/
   artifacts:
     paths:
       - bin/*
@@ -82,9 +78,8 @@ build-arm32v7:
     docker:
       platform: linux/arm/v7
   script:
-    - go mod tidy
     - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
-    - CGO_ENABLED=1 GOOS=linux GOARCH=arm go build -o bin/icmp-exporter-arm32v7 -ldflags="${flags}" ./cmd/icmp-exporter/
+    - CGO_ENABLED=1 GOOS=linux GOARCH=arm GOARM=7 go build -o bin/icmp-exporter-arm32v7 -ldflags="${flags}" ./cmd/icmp-exporter/
   artifacts:
     paths:
       - bin/*
@@ -98,7 +93,6 @@ build-riscv64:
     docker:
       platform: linux/riscv64
   script:
-    - go mod tidy
     - flags="-X 'main.versionString=$(git show -s --format=%cs) ${CI_COMMIT_TAG} $(git rev-parse HEAD)'"
     - CGO_ENABLED=1 GOOS=linux GOARCH=riscv64 go build -o bin/icmp-exporter-riscv64 -ldflags="${flags}" ./cmd/icmp-exporter/
   artifacts:
