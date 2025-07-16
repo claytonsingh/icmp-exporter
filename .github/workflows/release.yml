@@ -26,12 +26,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - { goos: "linux", goarch: "amd64",   goarm: "",  arch: "x64",     platform: "linux/amd64",   image: "golang:bullseye" }
-          - { goos: "linux", goarch: "386",     goarm: "",  arch: "x86",     platform: "linux/386",     image: "i386/golang:bullseye" }
-          - { goos: "linux", goarch: "arm64",   goarm: "",  arch: "arm64v8", platform: "linux/arm64",   image: "arm64v8/golang:bullseye" }
-          - { goos: "linux", goarch: "arm",     goarm: "7", arch: "arm32v7", platform: "linux/arm/v7",  image: "arm32v7/golang:bullseye" }
-          - { goos: "linux", goarch: "arm",     goarm: "6", arch: "arm32v6", platform: "linux/arm/v7",  image: "arm32v7/golang:bullseye" }
-          - { goos: "linux", goarch: "riscv64", goarm: "",  arch: "riscv64", platform: "linux/riscv64", image: "ghcr.io/claytonsingh/ubuntu-riscv-golang:latest" }
+          - { goos: "linux", goarch: "amd64",   arch: "x64",     platform: "linux/amd64",   image: "ghcr.io/claytonsingh/ubuntu-golang:amd64" }
+          - { goos: "linux", goarch: "386",     arch: "x86",     platform: "linux/386",     image: "ghcr.io/claytonsingh/ubuntu-golang:i386" }
+          - { goos: "linux", goarch: "arm64",   arch: "arm64v8", platform: "linux/arm64",   image: "ghcr.io/claytonsingh/ubuntu-golang:arm64" }
+          - { goos: "linux", goarch: "arm",     arch: "arm32v7", platform: "linux/arm/v7",  image: "ghcr.io/claytonsingh/ubuntu-golang:armv7" }
+          - { goos: "linux", goarch: "arm",     arch: "arm32v6", platform: "linux/arm/v5",  image: "ghcr.io/claytonsingh/ubuntu-golang:armv5" }
+          - { goos: "linux", goarch: "riscv64", arch: "riscv64", platform: "linux/riscv64", image: "ghcr.io/claytonsingh/ubuntu-golang:riscv64" }
     steps:
     - uses: actions/checkout@v4
     - name: Set Env
@@ -49,7 +49,6 @@ jobs:
         -e CGO_ENABLED=1 \
         -e GOOS=${{ matrix.goos }} \
         -e GOARCH=${{ matrix.goarch }} \
-        -e GOARM=${{ matrix.goarm }} \
         -e GOFLAGS="-buildvcs=false" \
         ${{ matrix.image }} \
         .github/build.sh
