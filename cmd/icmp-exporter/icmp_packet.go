@@ -1,5 +1,12 @@
 package main
 
+import (
+	"net"
+
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+)
+
 type IcmpPacket struct {
 	Type           byte   // type of message
 	Code           byte   // type of sub code
@@ -7,6 +14,59 @@ type IcmpPacket struct {
 	Identifier     uint16 // identifier
 	SequenceNumber uint16 // sequence number
 	Payload        []byte
+}
+
+var icmp4TypeCode = layers.CreateICMPv4TypeCode(8, 0)
+var icmp6TypeCode = layers.CreateICMPv6TypeCode(128, 0)
+
+func IcmpSerialize(buf gopacket.SerializeBuffer, dst net.IP, identifier uint16, sequenceNumber uint16, payload []byte) error {
+
+	if IsIPv4(dst) {
+		ip := layers.IPv4{
+			Version:  4,
+			TTL:      64,
+			SrcIP:    net.IP{0, 0, 0, 0},
+			DstIP:    dst.To4(),
+			Flags:    layers.IPv4DontFragment,
+			Protocol: layers.IPProtocolICMPv4,
+		}
+		icmp := layers.ICMPv4{
+			TypeCode: icmp4TypeCode,
+			Checksum: 0,
+			Id:       identifier,
+			Seq:      sequenceNumber,
+		}
+		payload := gopacket.Payload(payload)
+		if err := gopacket.SerializeLayers(buf, gopacket.SerializeOptions{ComputeChecksums: true, FixLengths: true}, &ip, &icmp, payload); err != nil {
+			return err
+		}
+	} else {
+		ip := layers.IPv6{
+			Version:  6,
+			HopLimit: 64,
+			SrcIP:    net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			DstIP:    dst.To16(),
+
+			NextHeader: layers.IPProtocolICMPv6,
+		}
+		icmp := layers.ICMPv6{
+			TypeCode: icmp6TypeCode,
+			Checksum: 0,
+		}
+		icmpecho := layers.ICMPv6Echo{
+			Identifier: identifier,
+			SeqNumber:  sequenceNumber,
+		}
+		payload := gopacket.Payload(payload)
+
+		// Set the network layer for checksum calculation
+		icmp.SetNetworkLayerForChecksum(&ip)
+
+		if err := gopacket.SerializeLayers(buf, gopacket.SerializeOptions{ComputeChecksums: true, FixLengths: true}, &ip, &icmp, &icmpecho, payload); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (this IcmpPacket) Serialize4(buffer []byte) int {

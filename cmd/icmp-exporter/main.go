@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/abursavich/nett"
 	"github.com/claytonsingh/golib/syncsignal"
+	"github.com/google/gopacket"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"kernel.org/pub/linux/libs/security/libcap/cap"
@@ -156,6 +158,35 @@ func parseArguments() Settings {
 }
 
 func main() {
+
+	buf := gopacket.NewSerializeBuffer()
+	err := IcmpSerialize(buf, net.ParseIP("127.0.0.1"), 1, 1, []byte("Hello, world!"))
+	if err != nil {
+		panic(err)
+	}
+	hexStr := ""
+	for i, b := range buf.Bytes() {
+		if i > 0 {
+			hexStr += " "
+		}
+		hexStr += fmt.Sprintf("%02x", b)
+	}
+	log.Println(hexStr)
+
+	buf2 := gopacket.NewSerializeBuffer()
+	err = IcmpSerialize(buf2, net.ParseIP("::1"), 1, 1, []byte("Hello, world!"))
+	if err != nil {
+		panic(err)
+	}
+	hexStr2 := ""
+	for i, b := range buf2.Bytes() {
+		if i > 0 {
+			hexStr2 += " "
+		}
+		hexStr2 += fmt.Sprintf("%02x", b)
+	}
+	log.Println(hexStr2)
+
 	log.Println("icmp-exporter version: ", versionString)
 	settings := parseArguments()
 

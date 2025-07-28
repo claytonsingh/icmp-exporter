@@ -243,7 +243,7 @@ func (this *ICMPNative) timeoutThread() {
 }
 
 func (this *ICMPNative) transmitThread() {
-	buf := make([]byte, 2048)
+	buf := gopacket.NewSerializeBuffer()
 	var id uint64
 	var SequenceNumber uint16
 	for {
@@ -295,10 +295,13 @@ func (this *ICMPNative) transmitThread() {
 					copy(pinger.packet.Payload, payload)
 					WriteUint64(pinger.packet.Payload, 0, id)
 
-					n := pinger.packet.Serialize4(buf)
+					err := IcmpSerialize(buf, pinger.probe.IPAddress, this.identifier, SequenceNumber, pinger.packet.Payload)
+					if err != nil {
+						panic(err)
+					}
 					address := syscall.SockaddrInet4{Addr: Ipv4ToBytes(pinger.probe.IPAddress)}
 					pinger.mutex.Lock()
-					if err := syscall.Sendto(this.socket4, buf[:n], 0, &address); err != nil {
+					if err := syscall.Sendto(this.socket4, buf.Bytes(), 0, &address); err != nil {
 						switch err {
 						case syscall.ENETUNREACH: // network is unreachable
 						case syscall.EHOSTUNREACH: // host is unreachable
@@ -323,10 +326,13 @@ func (this *ICMPNative) transmitThread() {
 					copy(pinger.packet.Payload, payload)
 					WriteUint64(pinger.packet.Payload, 0, id)
 
-					n := pinger.packet.Serialize6(buf)
+					err := IcmpSerialize(buf, pinger.probe.IPAddress, this.identifier, SequenceNumber, pinger.packet.Payload)
+					if err != nil {
+						panic(err)
+					}
 					address := syscall.SockaddrInet6{Addr: Ipv6ToBytes(pinger.probe.IPAddress)}
 					pinger.mutex.Lock()
-					if err := syscall.Sendto(this.socket6, buf[:n], 0, &address); err != nil {
+					if err := syscall.Sendto(this.socket6, buf.Bytes(), 0, &address); err != nil {
 						switch err {
 						case syscall.ENETUNREACH: // network is unreachable
 						case syscall.EHOSTUNREACH: // host is unreachable
@@ -523,6 +529,11 @@ func socket_set_flags(fd int, so_timestamping_flags int, so_timestamp int, so_ti
 		} else {
 			log.Printf("IPV6_V6ONLY: %v %v\n", val, 0)
 		}
+	}
+
+	// Set options: here, we enable IP_HDRINCL to manually include the IP header
+	if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_HDRINCL, 1); err != nil {
+		log.Fatalf("Failed to set IP_HDRINCL: %v", err)
 	}
 
 	return nil
