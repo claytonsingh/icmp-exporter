@@ -3,6 +3,13 @@ ICMP exporter for [prometheus](https://prometheus.io) efficiently detects path i
 
 The major difference from blackbox is that we use counters where possible and asynchronously send packets in the background. When a request to the probe endpoint is recieved data collection is started for that target sending a ping every `interval`. This background collection continues as long as the probe endpoint for that target is requested more than once every 10m.
 
+## Features
+- **ICMP Ping**: Traditional ICMP echo request/reply for network reachability testing
+- **TCP SYN Ping**: TCP SYN packet probing for testing TCP connectivity and port reachability
+- **Hardware Timestamping**: Microsecond precision using network card hardware features
+- **IPv4/IPv6 Support**: Full dual-stack support for both ICMP and TCP
+- **Prometheus Integration**: Clean metrics export with proper labeling
+
 # Command line
 ```
 Usage of icmp-exporter:
@@ -26,6 +33,8 @@ Usage of icmp-exporter:
         Ip and port to listen on. (default ":9116")
   -maxpps int
         Maximum packets per second. Minimum 1. Must be unlocked. (default 10000)
+  -tcp
+        Enable TCP SYN ping in addition to ICMP ping.
   -timeout int
         ICMP timout in milliseconds. (default 3000)
 ```
@@ -55,9 +64,13 @@ ip_version
         `4`: to resolve only ipv4 addresses
         `6`: to resolve only ipv6 addresses
         `all`: to resolve both ipv4 and ipv6 addresses
+tcp_port
+        TCP port to use for SYN ping when TCP is enabled.
+        Must be between 1 and 65535.
 ```
 
 # Prometheus example configuration
+ICMP
 ```
 scrape_configs:
   - job_name: 'Packet Loss Exporter'
@@ -72,6 +85,48 @@ scrape_configs:
     static_configs:
       - targets:
         - example.com
+```
+
+TCP
+```
+scrape_configs:
+  - job_name: 'Packet Loss Exporter'
+    metrics_path: /probe
+    params:
+      tcp_port: '443'
+    relabel_configs:
+      - target_label: __param_target
+        source_labels: [__address__]
+      - target_label: instance
+        source_labels: [__address__]
+      - target_label: __address__
+        replacement: 127.0.0.1:9116
+    static_configs:
+      - targets:
+        - example.com
+```
+
+## Running with TCP SYN ping
+To enable TCP SYN ping in addition to ICMP ping:
+```bash
+./icmp-exporter -tcp -hard -drop -listen 127.0.0.1:9116
+```
+
+This will send both ICMP echo requests and TCP SYN packets to the target endpoints, providing both network-level and transport-level connectivity testing.
+
+### Example probe requests with TCP port specification:
+```
+# Probe with ICMP
+http://localhost:9116/probe?target=example.com
+
+# Probe with TCP port 443
+http://localhost:9116/probe?target=example.com&tcp_port=443
+
+# Probe with TCP port 22 (SSH)
+http://localhost:9116/probe?target=example.com&tcp_port=22
+
+# Probe multiple targets with TCP port 443
+http://localhost:9116/probe?target=example.com&target=google.com&tcp_port=443
 ```
 
 # Network card support
@@ -155,3 +210,6 @@ sqrt(
   (increase(icmp_probe_latency_seconds_total{}[10m])         / increase(icmp_probe_packets_recv_total{}[10m]))^2
 )
 ```
+
+### TCP
+Tcp metrics are the same as ICMP except starting with `tcp_`

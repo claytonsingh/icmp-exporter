@@ -19,13 +19,13 @@ type IcmpPacket struct {
 var icmp4TypeCode = layers.CreateICMPv4TypeCode(8, 0)
 var icmp6TypeCode = layers.CreateICMPv6TypeCode(128, 0)
 
-func IcmpSerialize(buf gopacket.SerializeBuffer, dst net.IP, identifier uint16, sequenceNumber uint16, payload []byte) error {
+func IcmpSerialize(buf gopacket.SerializeBuffer, srcIP, dst net.IP, identifier uint16, sequenceNumber uint16, payload []byte) error {
 
 	if IsIPv4(dst) {
 		ip := layers.IPv4{
 			Version:  4,
 			TTL:      64,
-			SrcIP:    net.IP{0, 0, 0, 0},
+			SrcIP:    srcIP.To4(),
 			DstIP:    dst.To4(),
 			Flags:    layers.IPv4DontFragment,
 			Protocol: layers.IPProtocolICMPv4,
@@ -44,7 +44,7 @@ func IcmpSerialize(buf gopacket.SerializeBuffer, dst net.IP, identifier uint16, 
 		ip := layers.IPv6{
 			Version:  6,
 			HopLimit: 64,
-			SrcIP:    net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			SrcIP:    srcIP.To16(),
 			DstIP:    dst.To16(),
 
 			NextHeader: layers.IPProtocolICMPv6,

@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/abursavich/nett"
 	"github.com/claytonsingh/golib/syncsignal"
-	"github.com/google/gopacket"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"kernel.org/pub/linux/libs/security/libcap/cap"
@@ -22,6 +20,7 @@ import (
 
 type PingProbe struct {
 	IPAddress        net.IP
+	TCPPort          uint16 // TCP destination port for SYN ping
 	SentCount        int32
 	RecvCount        int32
 	RoundtripTotal   int64 // In microseconds
@@ -69,6 +68,11 @@ var probeMap = sync.Map{}
 
 var signal = syncsignal.NewSignal()
 var resolver = nett.CacheResolver{TTL: 5 * time.Minute}
+var globalTcpPinger *TCPNative
+
+type Pinger interface {
+	SetProbes(probes []*PingProbe)
+}
 
 type Settings struct {
 	iface4           string
@@ -107,6 +111,7 @@ func parseArguments() Settings {
 	flag.IntVar(&settings.interval, "interval", defaults.interval, "ICMP interval in milliseconds. Minimum 10. Must be unlocked.")
 	flag.IntVar(&settings.maxpps, "maxpps", defaults.maxpps, "Maximum packets per second. Minimum 1. Must be unlocked.")
 	flag.IntVar(&settings.identifier, "identifier", defaults.identifier, "ICMP identifier between 0 and 65535. Must be unlocked. The possible options are:\n0 - Process pid (default)\n1 - Random")
+
 	flag.Parse()
 
 	if settings.iface4 == "auto" {
@@ -141,6 +146,7 @@ func parseArguments() Settings {
 		if (settings.identifier < 0) || (settings.identifier > 65535) {
 			errors = append(errors, "identifier must be between 0 and 65535")
 		}
+
 	} else {
 		settings.timeout = defaults.timeout
 		settings.maxpps = defaults.maxpps
@@ -158,42 +164,13 @@ func parseArguments() Settings {
 }
 
 func main() {
-
-	buf := gopacket.NewSerializeBuffer()
-	err := IcmpSerialize(buf, net.ParseIP("127.0.0.1"), 1, 1, []byte("Hello, world!"))
-	if err != nil {
-		panic(err)
-	}
-	hexStr := ""
-	for i, b := range buf.Bytes() {
-		if i > 0 {
-			hexStr += " "
-		}
-		hexStr += fmt.Sprintf("%02x", b)
-	}
-	log.Println(hexStr)
-
-	buf2 := gopacket.NewSerializeBuffer()
-	err = IcmpSerialize(buf2, net.ParseIP("::1"), 1, 1, []byte("Hello, world!"))
-	if err != nil {
-		panic(err)
-	}
-	hexStr2 := ""
-	for i, b := range buf2.Bytes() {
-		if i > 0 {
-			hexStr2 += " "
-		}
-		hexStr2 += fmt.Sprintf("%02x", b)
-	}
-	log.Println(hexStr2)
-
 	log.Println("icmp-exporter version: ", versionString)
 	settings := parseArguments()
 
-	p := NewICMPNative(settings.useHardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.maxpps, (uint16)(settings.identifier))
+	p := NewNative(settings.useHardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.maxpps, settings.identifier, 61000, 65500)
 	p.Start()
-
 	go UpdateProbesThread(p)
+
 	go PruneMapThread()
 
 	ln, err := net.Listen("tcp", settings.listenAddr)
@@ -231,11 +208,15 @@ func main() {
 	}
 }
 
-func GetProbe(ip net.IP) (*PingProbe, bool) {
-	var ipBytes [16]byte
+func GetProbe(ip net.IP, tcpPort uint16) (*PingProbe, bool) {
+	var ipBytes [18]byte
 	ip = ip.To16()
-	copy(ipBytes[:], ip[:])
+	copy(ipBytes[:16], ip[:])
+	ipBytes[16] = byte(tcpPort >> 8)
+	ipBytes[17] = byte(tcpPort & 0xFF)
 	now := time.Now()
+
+	// Create a unique key that includes both IP and TCP port
 	if untyped, ok := probeMap.Load(ipBytes); ok {
 		probe := untyped.(*PingProbe)
 		probe.Mutex.Lock()
@@ -243,7 +224,12 @@ func GetProbe(ip net.IP) (*PingProbe, bool) {
 		probe.Mutex.Unlock()
 		return probe, false
 	} else {
-		new := &PingProbe{IPAddress: ipBytes[:], Results: NewDataBuff[PingResult](250), LastAccess: now}
+		new := &PingProbe{
+			IPAddress:  ipBytes[:16],
+			TCPPort:    tcpPort,
+			Results:    NewDataBuff[PingResult](250),
+			LastAccess: now,
+		}
 		untyped, _ := probeMap.LoadOrStore(ipBytes, new)
 		probe := untyped.(*PingProbe)
 		if probe == new {
@@ -285,7 +271,7 @@ func PruneMapThread() {
 	}
 }
 
-func UpdateProbesThread(p *ICMPNative) {
+func UpdateProbesThread(p Pinger) {
 	Wait := signal.GetWaiter(true)
 	for {
 		Wait()
