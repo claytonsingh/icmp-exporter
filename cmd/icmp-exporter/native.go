@@ -3,6 +3,20 @@ package main
 import (
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+var (
+	icmpActiveProbes = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "icmp_active_probes",
+		Help: "The number of active probes",
+	})
+	tcpActiveProbes = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "tcp_active_probes",
+		Help: "The number of active TCP probes",
+	})
 )
 
 type Native struct {
@@ -32,8 +46,23 @@ func (this *Native) Start() {
 }
 
 func (this *Native) SetProbes(probes []*PingProbe) {
+	// copy probes to a new slice
+	probesCopy := make([]*PingProbe, len(probes))
+	copy(probesCopy, probes)
+
+	var icmpProbes, tcpProbes uint64 = 0, 0
+	for _, probe := range probesCopy {
+		if probe.TCPPort == 0 {
+			icmpProbes++
+		} else {
+			tcpProbes++
+		}
+	}
+
 	this.probeMutex.Lock()
-	this.probes = probes
+	icmpActiveProbes.Set(float64(icmpProbes))
+	tcpActiveProbes.Set(float64(tcpProbes))
+	this.probes = probesCopy
 	this.probeMutex.Unlock()
 }
 
@@ -43,7 +72,6 @@ func (this *Native) transmitThread() {
 		probes := this.probes
 		this.probeMutex.Unlock()
 
-		activeProbes.Set(float64(len(probes)))
 		if len(probes) == 0 {
 			time.Sleep(1 * time.Second)
 			continue

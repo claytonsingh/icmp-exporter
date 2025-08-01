@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"sync"
 	"time"
@@ -29,10 +29,6 @@ var (
 		Name: "tcp_packets_error_total",
 		Help: "The total number of TCP error packets",
 	})
-	tcpActiveProbes = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "tcp_active_probes",
-		Help: "The number of active TCP probes",
-	})
 )
 
 type tcpPinger struct {
@@ -47,7 +43,7 @@ type tcpPinger struct {
 type TCPNative struct {
 	socket4        int
 	socket6        int
-	tcpPinger      *SafeOrderedMap[uint32, *tcpPinger]
+	tcpPinger      *SafeOrderedMap[uint64, *tcpPinger]
 	started        bool
 	timeout        time.Duration
 	timestampType  int
@@ -58,24 +54,22 @@ type TCPNative struct {
 	srcIP6         net.IP
 	srcPortMin     uint16
 	srcPortMax     uint16
-	srcPort        uint16
 	transmitBuffer gopacket.SerializeBuffer
 	random         *rand.Rand
 }
 
 func NewTCPNative(hardware bool, iface4 string, iface6 string, timeout int, identifier uint16, minPort uint16, maxPort uint16) *TCPNative {
 	var this TCPNative
-	this.tcpPinger = NewSafeOrderedMap[uint32, *tcpPinger]()
+	this.tcpPinger = NewSafeOrderedMap[uint64, *tcpPinger]()
 	this.timeout = time.Duration(timeout) * time.Millisecond
 	this.interface4 = iface4
 	this.interface6 = iface6
 	this.transmitBuffer = gopacket.NewSerializeBuffer()
-	this.random = rand.New(rand.NewSource(time.Now().UnixNano()))
+	this.random = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
 	// Use a random source port range to avoid conflicts
 	this.srcPortMin = minPort
 	this.srcPortMax = maxPort
-	this.srcPort = this.srcPortMin
 
 	if hardware {
 		this.timestampFlags = syscall.SOF_TIMESTAMPING_RX_HARDWARE | syscall.SOF_TIMESTAMPING_TX_HARDWARE | syscall.SOF_TIMESTAMPING_RAW_HARDWARE
@@ -240,11 +234,6 @@ func (this *TCPNative) timeoutThread() {
 }
 
 func (this *TCPNative) IncrementSequenceNumber() {
-	this.srcPort += 1
-	if this.srcPort > this.srcPortMax {
-		this.srcPort = this.srcPortMin
-	}
-
 	// If the interface changes, we need to update the source IP
 	if this.socket4 > 0 && this.interface4 != "" {
 		this.srcIP4, _ = getInterfaceIP(this.interface4, true)
@@ -255,16 +244,18 @@ func (this *TCPNative) IncrementSequenceNumber() {
 }
 
 func (this *TCPNative) Transmit(probe *PingProbe) {
-	tcpActiveProbes.Set(float64(1))
 
 	// Find a random sequence number that is not in use
-	sequenceNumber := uint32(0)
+	var id uint64
 	for {
-		sequenceNumber = this.random.Uint32()
-		if _, ok := this.tcpPinger.Get(sequenceNumber); !ok {
+		// Generate a random number between [srcPortMin, srcPortMax] in the upper 32 bits and the sequence number in the lower 32 bits
+		id = this.random.Uint64N(uint64(this.srcPortMax-this.srcPortMin+1)<<32) + uint64(this.srcPortMin)<<32
+		if _, ok := this.tcpPinger.Get(id); !ok {
 			break
 		}
 	}
+	sequenceNumber := uint32(id & 0xFFFFFFFF)
+	srcPort := uint16(id >> 32)
 
 	var pinger tcpPinger
 	pinger.timestampStart = time.Now()
@@ -272,9 +263,9 @@ func (this *TCPNative) Transmit(probe *PingProbe) {
 
 	if IsIPv4(pinger.probe.IPAddress) {
 		if this.socket4 > 0 && this.srcIP4 != nil {
-			this.tcpPinger.Set(sequenceNumber, &pinger)
+			this.tcpPinger.Set(id, &pinger)
 			pinger.packet = TcpPacket{
-				SourcePort:      this.srcPort,
+				SourcePort:      srcPort,
 				DestinationPort: pinger.probe.TCPPort,
 				SequenceNumber:  sequenceNumber,
 				Acknowledgment:  0,
@@ -287,7 +278,7 @@ func (this *TCPNative) Transmit(probe *PingProbe) {
 				Payload:         []byte{},
 			}
 
-			err := TcpSerialize(this.transmitBuffer, this.srcIP4, pinger.probe.IPAddress, this.srcPort, pinger.probe.TCPPort, sequenceNumber, TCP_FLAG_SYN, []byte{}, pinger.packet.Payload)
+			err := TcpSerialize(this.transmitBuffer, this.srcIP4, pinger.probe.IPAddress, srcPort, pinger.probe.TCPPort, sequenceNumber, TCP_FLAG_SYN, []byte{}, pinger.packet.Payload)
 			if err != nil {
 				panic(err)
 			}
@@ -308,9 +299,9 @@ func (this *TCPNative) Transmit(probe *PingProbe) {
 		}
 	} else {
 		if this.socket6 > 0 && this.srcIP6 != nil {
-			this.tcpPinger.Set(sequenceNumber, &pinger)
+			this.tcpPinger.Set(id, &pinger)
 			pinger.packet = TcpPacket{
-				SourcePort:      this.srcPort,
+				SourcePort:      srcPort,
 				DestinationPort: pinger.probe.TCPPort,
 				SequenceNumber:  sequenceNumber,
 				Acknowledgment:  0,
@@ -323,7 +314,7 @@ func (this *TCPNative) Transmit(probe *PingProbe) {
 				Payload:         []byte{},
 			}
 
-			err := TcpSerialize(this.transmitBuffer, this.srcIP6, pinger.probe.IPAddress, this.srcPort, pinger.probe.TCPPort, sequenceNumber, TCP_FLAG_SYN, []byte{}, pinger.packet.Payload)
+			err := TcpSerialize(this.transmitBuffer, this.srcIP6, pinger.probe.IPAddress, srcPort, pinger.probe.TCPPort, sequenceNumber, TCP_FLAG_SYN, []byte{}, pinger.packet.Payload)
 			if err != nil {
 				panic(err)
 			}
@@ -362,7 +353,8 @@ func (this *TCPNative) receiveThread4() {
 					if layer == layers.LayerTypeTCP {
 
 						// Ack is one higher then the sequence number of the SYN we sent
-						np, ok := this.tcpPinger.Get(tcp4.Ack - 1)
+						id := uint64(tcp4.DstPort)<<32 + uint64(tcp4.Ack-1)
+						np, ok := this.tcpPinger.Get(id)
 
 						if ok && tcp4.ACK && tcp4.SYN && np.probe.IPAddress.Equal(ip4.SrcIP) && tcp4.SrcPort == layers.TCPPort(np.probe.TCPPort) && tcp4.DstPort == layers.TCPPort(np.packet.SourcePort) {
 							np.mutex.Lock()
@@ -395,7 +387,8 @@ func (this *TCPNative) receiveThread6() {
 			if err := parser6.DecodeLayers(data[:ndata], &decoded); err == nil {
 				for _, layer := range decoded {
 					if layer == layers.LayerTypeTCP {
-						np, ok := this.tcpPinger.Get(tcp6.Ack - 1)
+						id := uint64(tcp6.DstPort)<<32 + uint64(tcp6.Ack-1)
+						np, ok := this.tcpPinger.Get(id)
 
 						if ok && tcp6.ACK && tcp6.SYN && np.probe.IPAddress.Equal(ip) && tcp6.SrcPort == layers.TCPPort(np.probe.TCPPort) && tcp6.DstPort == layers.TCPPort(np.packet.SourcePort) {
 							np.mutex.Lock()
@@ -435,9 +428,9 @@ func (this *TCPNative) errorThread4() {
 			if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
 				for _, layer := range decoded {
 					if layer == layers.LayerTypeTCP {
-
 						// Read the sequence number from the packet
-						np, ok := this.tcpPinger.Get(tcp.Seq)
+						id := uint64(tcp.SrcPort)<<32 + uint64(tcp.Seq)
+						np, ok := this.tcpPinger.Get(id)
 
 						if ok && tcp.DstPort == layers.TCPPort(np.probe.TCPPort) && tcp.SrcPort == layers.TCPPort(np.packet.SourcePort) && ip4.DstIP.Equal(np.probe.IPAddress) {
 							np.mutex.Lock()
@@ -477,9 +470,9 @@ func (this *TCPNative) errorThread6() {
 			if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
 				for _, layer := range decoded {
 					if layer == layers.LayerTypeTCP {
-
 						// Read the sequence number from the packet
-						np, ok := this.tcpPinger.Get(tcp.Seq)
+						id := uint64(tcp.SrcPort)<<32 + uint64(tcp.Seq)
+						np, ok := this.tcpPinger.Get(id)
 
 						if ok && tcp.DstPort == layers.TCPPort(np.probe.TCPPort) && tcp.SrcPort == layers.TCPPort(np.packet.SourcePort) && ip6.DstIP.Equal(np.probe.IPAddress) {
 							np.mutex.Lock()

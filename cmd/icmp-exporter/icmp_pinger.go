@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"os"
 	"slices"
@@ -19,21 +19,17 @@ import (
 )
 
 var (
-	txPackets = promauto.NewCounter(prometheus.CounterOpts{
+	icmpTxPackets = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "icmp_packets_sent_total",
 		Help: "The total number of transmitted packets",
 	})
-	rxPackets = promauto.NewCounter(prometheus.CounterOpts{
+	icmpRxPackets = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "icmp_packets_recv_total",
 		Help: "The total number of received packets",
 	})
-	erPackets = promauto.NewCounter(prometheus.CounterOpts{
+	icmpErPackets = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "icmp_packets_error_total",
 		Help: "The total number of error packets",
-	})
-	activeProbes = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "icmp_active_probes",
-		Help: "The number of active probes",
 	})
 )
 
@@ -66,7 +62,7 @@ type ICMPNative struct {
 	srcIP6         net.IP
 	transmitBuffer gopacket.SerializeBuffer
 	SequenceNumber uint16
-	id             uint64
+	random         *rand.Rand
 }
 
 func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, identifier uint16) *ICMPNative {
@@ -76,13 +72,14 @@ func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, ide
 	this.interface4 = iface4
 	this.interface6 = iface6
 	this.transmitBuffer = gopacket.NewSerializeBuffer()
+	this.random = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
 	this.identifier = identifier
 	if this.identifier == 0 { // Default identifier is pid
 		this.identifier = (uint16)(os.Getpid())
 	}
 	if this.identifier == 1 { // If this is launched in a docker container then we are pid 1 so pick a random identifier
-		this.identifier = (uint16)(rand.Intn(65535))
+		this.identifier = (uint16)(this.random.IntN(65535))
 	}
 
 	if hardware {
@@ -206,7 +203,7 @@ func (this *ICMPNative) timeoutThread() {
 			// Things like failed arp cause tx failures on sockets, so mark those as failed pings
 			if pinger.timestampSend == 0 || pinger.timestampSend == -1 {
 				// Increment sent packets counter
-				txPackets.Inc()
+				icmpTxPackets.Inc()
 
 				pinger.probe.AddSample(PingResult{
 					Success:      false,
@@ -215,7 +212,7 @@ func (this *ICMPNative) timeoutThread() {
 				})
 			} else if pinger.timestampSend > 0 && pinger.timestampRecv != -1 && (pinger.timestampRecv == 0 || pinger.timestampSend <= pinger.timestampRecv) {
 				// Increment sent packets counter
-				txPackets.Inc()
+				icmpTxPackets.Inc()
 
 				// if both sent and recv are set then we count it as a success
 				if pinger.timestampRecv > 0 {
@@ -224,7 +221,7 @@ func (this *ICMPNative) timeoutThread() {
 						RountripTime: pinger.timestampRecv - pinger.timestampSend,
 						Timestamp:    pinger.timestampStart,
 					})
-					rxPackets.Inc()
+					icmpRxPackets.Inc()
 				} else {
 					pinger.probe.AddSample(PingResult{
 						Success:      false,
@@ -235,7 +232,7 @@ func (this *ICMPNative) timeoutThread() {
 			} else {
 				// if there was an error dont count the packet
 				// fmt.Println(pinger.timestampSend, pinger.timestampRecv, pinger.probe.IPAddress)
-				erPackets.Inc()
+				icmpErPackets.Inc()
 			}
 			pinger.mutex.Unlock()
 		}
@@ -255,7 +252,15 @@ func (this *ICMPNative) IncrementSequenceNumber() {
 }
 
 func (this *ICMPNative) Transmit(probe *PingProbe) {
-	this.id = this.id + 1
+
+	// Find a random identifier that is not in use
+	var id uint64
+	for {
+		id = this.random.Uint64()
+		if _, ok := this.nativePinger.Get(id); !ok {
+			break
+		}
+	}
 
 	var pinger nativePinger
 	pinger.timestampStart = time.Now()
@@ -263,7 +268,7 @@ func (this *ICMPNative) Transmit(probe *PingProbe) {
 
 	if IsIPv4(pinger.probe.IPAddress) {
 		if this.socket4 > 0 {
-			this.nativePinger.Set(this.id, &pinger)
+			this.nativePinger.Set(id, &pinger)
 			pinger.packet = IcmpPacket{
 				Type:           8,
 				Code:           0,
@@ -272,7 +277,7 @@ func (this *ICMPNative) Transmit(probe *PingProbe) {
 				Payload:        make([]byte, len(payload)),
 			}
 			copy(pinger.packet.Payload, payload)
-			WriteUint64(pinger.packet.Payload, 0, this.id)
+			WriteUint64(pinger.packet.Payload, 0, id)
 
 			err := IcmpSerialize(this.transmitBuffer, this.srcIP4, pinger.probe.IPAddress, this.identifier, this.SequenceNumber, pinger.packet.Payload)
 			if err != nil {
@@ -294,7 +299,7 @@ func (this *ICMPNative) Transmit(probe *PingProbe) {
 		}
 	} else {
 		if this.socket6 > 0 {
-			this.nativePinger.Set(this.id, &pinger)
+			this.nativePinger.Set(id, &pinger)
 			pinger.packet = IcmpPacket{
 				Type:           128,
 				Code:           0,
@@ -303,7 +308,7 @@ func (this *ICMPNative) Transmit(probe *PingProbe) {
 				Payload:        make([]byte, len(payload)),
 			}
 			copy(pinger.packet.Payload, payload)
-			WriteUint64(pinger.packet.Payload, 0, this.id)
+			WriteUint64(pinger.packet.Payload, 0, id)
 
 			err := IcmpSerialize(this.transmitBuffer, this.srcIP6, pinger.probe.IPAddress, this.identifier, this.SequenceNumber, pinger.packet.Payload)
 			if err != nil {
