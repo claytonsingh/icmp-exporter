@@ -31,6 +31,16 @@ var (
 	})
 )
 
+var (
+	options = []layers.TCPOption{
+		{
+			OptionType:   255,
+			OptionLength: 37,
+			OptionData:   []byte("github.com/claytonsingh/icmp-exporter"),
+		},
+	}
+)
+
 type tcpPinger struct {
 	timestampStart time.Time
 	timestampSend  int64
@@ -250,6 +260,10 @@ func (this *TCPNative) Transmit(probe *PingProbe) {
 	for {
 		// Generate a random number between [srcPortMin, srcPortMax] in the upper 32 bits and the sequence number in the lower 32 bits
 		id = this.random.Uint64N(uint64(this.srcPortMax-this.srcPortMin+1)<<32) + uint64(this.srcPortMin)<<32
+		// Avoid the last 16 sequence numbers to avoid integer wrapping
+		if id&0xFFFFFFFF > 0xFFFFFFF0 {
+			continue
+		}
 		if _, ok := this.tcpPinger.Get(id); !ok {
 			break
 		}
@@ -278,7 +292,7 @@ func (this *TCPNative) Transmit(probe *PingProbe) {
 				Payload:         []byte{},
 			}
 
-			err := TcpSerialize(this.transmitBuffer, this.srcIP4, pinger.probe.IPAddress, srcPort, pinger.probe.TCPPort, sequenceNumber, TCP_FLAG_SYN, []byte{}, pinger.packet.Payload)
+			err := TcpSerialize(this.transmitBuffer, this.srcIP4, pinger.probe.IPAddress, srcPort, pinger.probe.TCPPort, sequenceNumber, TCP_FLAG_SYN, options, []byte{})
 			if err != nil {
 				panic(err)
 			}
@@ -314,7 +328,7 @@ func (this *TCPNative) Transmit(probe *PingProbe) {
 				Payload:         []byte{},
 			}
 
-			err := TcpSerialize(this.transmitBuffer, this.srcIP6, pinger.probe.IPAddress, srcPort, pinger.probe.TCPPort, sequenceNumber, TCP_FLAG_SYN, []byte{}, pinger.packet.Payload)
+			err := TcpSerialize(this.transmitBuffer, this.srcIP6, pinger.probe.IPAddress, srcPort, pinger.probe.TCPPort, sequenceNumber, TCP_FLAG_SYN, options, []byte{})
 			if err != nil {
 				panic(err)
 			}

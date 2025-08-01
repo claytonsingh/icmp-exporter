@@ -30,7 +30,7 @@ const (
 	TCP_FLAG_URG = 0x20
 )
 
-func TcpSerialize(buf gopacket.SerializeBuffer, srcIP, dstIP net.IP, srcPort, dstPort uint16, sequenceNumber uint32, flags uint8, options []byte, payload []byte) error {
+func TcpSerialize(buf gopacket.SerializeBuffer, srcIP, dstIP net.IP, srcPort, dstPort uint16, sequenceNumber uint32, flags uint8, options []layers.TCPOption, payload []byte) error {
 	if IsIPv4(dstIP) {
 		ip := layers.IPv4{
 			Version:  4,
@@ -41,19 +41,19 @@ func TcpSerialize(buf gopacket.SerializeBuffer, srcIP, dstIP net.IP, srcPort, ds
 			Protocol: layers.IPProtocolTCP,
 		}
 		tcp := layers.TCP{
-			SrcPort:    layers.TCPPort(srcPort),
-			DstPort:    layers.TCPPort(dstPort),
-			Seq:        sequenceNumber,
-			Ack:        0,
-			DataOffset: uint8(5 + len(options)/4), // 5 is the base header size in 32-bit words
-			FIN:        (flags & TCP_FLAG_FIN) != 0,
-			SYN:        (flags & TCP_FLAG_SYN) != 0,
-			RST:        (flags & TCP_FLAG_RST) != 0,
-			PSH:        (flags & TCP_FLAG_PSH) != 0,
-			ACK:        (flags & TCP_FLAG_ACK) != 0,
-			URG:        (flags & TCP_FLAG_URG) != 0,
-			Window:     uint16(65535),
-			Urgent:     0,
+			SrcPort: layers.TCPPort(srcPort),
+			DstPort: layers.TCPPort(dstPort),
+			Seq:     sequenceNumber,
+			Ack:     0,
+			FIN:     (flags & TCP_FLAG_FIN) != 0,
+			SYN:     (flags & TCP_FLAG_SYN) != 0,
+			RST:     (flags & TCP_FLAG_RST) != 0,
+			PSH:     (flags & TCP_FLAG_PSH) != 0,
+			ACK:     (flags & TCP_FLAG_ACK) != 0,
+			URG:     (flags & TCP_FLAG_URG) != 0,
+			Window:  uint16(65535),
+			Urgent:  0,
+			Options: options,
 		}
 		tcp.SetNetworkLayerForChecksum(&ip)
 
@@ -74,19 +74,19 @@ func TcpSerialize(buf gopacket.SerializeBuffer, srcIP, dstIP net.IP, srcPort, ds
 			NextHeader: layers.IPProtocolTCP,
 		}
 		tcp := layers.TCP{
-			SrcPort:    layers.TCPPort(srcPort),
-			DstPort:    layers.TCPPort(dstPort),
-			Seq:        sequenceNumber,
-			Ack:        0,
-			DataOffset: uint8(5 + len(options)/4),
-			FIN:        (flags & TCP_FLAG_FIN) != 0,
-			SYN:        (flags & TCP_FLAG_SYN) != 0,
-			RST:        (flags & TCP_FLAG_RST) != 0,
-			PSH:        (flags & TCP_FLAG_PSH) != 0,
-			ACK:        (flags & TCP_FLAG_ACK) != 0,
-			URG:        (flags & TCP_FLAG_URG) != 0,
-			Window:     uint16(65535),
-			Urgent:     0,
+			SrcPort: layers.TCPPort(srcPort),
+			DstPort: layers.TCPPort(dstPort),
+			Seq:     sequenceNumber,
+			Ack:     0,
+			FIN:     (flags & TCP_FLAG_FIN) != 0,
+			SYN:     (flags & TCP_FLAG_SYN) != 0,
+			RST:     (flags & TCP_FLAG_RST) != 0,
+			PSH:     (flags & TCP_FLAG_PSH) != 0,
+			ACK:     (flags & TCP_FLAG_ACK) != 0,
+			URG:     (flags & TCP_FLAG_URG) != 0,
+			Window:  uint16(65535),
+			Urgent:  0,
+			Options: options,
 		}
 		tcp.SetNetworkLayerForChecksum(&ip)
 
