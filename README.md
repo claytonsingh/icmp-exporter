@@ -33,8 +33,6 @@ Usage of icmp-exporter:
         Ip and port to listen on. (default ":9116")
   -maxpps int
         Maximum packets per second. Minimum 1. Must be unlocked. (default 10000)
-  -tcp
-        Enable TCP SYN ping in addition to ICMP ping.
   -timeout int
         ICMP timout in milliseconds. (default 3000)
 ```
@@ -93,7 +91,7 @@ scrape_configs:
   - job_name: 'Packet Loss Exporter'
     metrics_path: /probe
     params:
-      tcp_port: '443'
+      tcp_port: ['443']
     relabel_configs:
       - target_label: __param_target
         source_labels: [__address__]
