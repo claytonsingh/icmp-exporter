@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"net"
+	"sort"
 	"sync"
 	"time"
 
@@ -50,19 +53,53 @@ func (this *Native) SetProbes(probes []*PingProbe) {
 	probesCopy := make([]*PingProbe, len(probes))
 	copy(probesCopy, probes)
 
-	var icmpProbes, tcpProbes uint64 = 0, 0
-	for _, probe := range probesCopy {
-		if probe.TCPPort == 0 {
-			icmpProbes++
-		} else {
-			tcpProbes++
+	// sort probes by IP
+	sort.Slice(probesCopy, func(i, j int) bool {
+		return bytes.Compare(probesCopy[i].IPAddress, probesCopy[j].IPAddress) < 0
+	})
+
+	// count the max number of probes with the same IP
+	maxIPCount := 0
+	icmpProbes := 0
+	tcpProbes := 0
+	{
+		lastIP := net.IP{}
+		ipCount := 0
+		for _, probe := range probesCopy {
+			if probe.TCPPort == 0 {
+				icmpProbes++
+			} else {
+				tcpProbes++
+			}
+			if probe.IPAddress.Equal(lastIP) {
+				ipCount++
+			} else {
+				if ipCount > maxIPCount {
+					maxIPCount = ipCount
+				}
+				lastIP = probe.IPAddress
+				ipCount = 1
+			}
+		}
+		if ipCount > maxIPCount {
+			maxIPCount = ipCount
+		}
+	}
+
+	// Space out probes with the same IP to avoid congestion
+	probesShuffled := make([]*PingProbe, len(probes))
+	i := 0
+	for x := range maxIPCount {
+		for y := x; y < len(probesCopy); y += maxIPCount {
+			probesShuffled[i] = probesCopy[y]
+			i += 1
 		}
 	}
 
 	this.probeMutex.Lock()
 	icmpActiveProbes.Set(float64(icmpProbes))
 	tcpActiveProbes.Set(float64(tcpProbes))
-	this.probes = probesCopy
+	this.probes = probesShuffled
 	this.probeMutex.Unlock()
 }
 

@@ -63,7 +63,7 @@ ip_version
         `6`: to resolve only ipv6 addresses
         `all`: to resolve both ipv4 and ipv6 addresses
 tcp_port
-        TCP port to use for SYN ping when TCP is enabled.
+        TCP destination port to use for SYN ping. Can be repeated.
         Must be between 1 and 65535.
 ```
 
@@ -91,7 +91,7 @@ scrape_configs:
   - job_name: 'Packet Loss Exporter'
     metrics_path: /probe
     params:
-      tcp_port: ['443']
+      tcp_port: ['80', '443']
     relabel_configs:
       - target_label: __param_target
         source_labels: [__address__]
@@ -104,27 +104,30 @@ scrape_configs:
         - example.com
 ```
 
-## Running with TCP SYN ping
-To enable TCP SYN ping in addition to ICMP ping:
-```bash
-./icmp-exporter -tcp -hard -drop -listen 127.0.0.1:9116
-```
-
-This will send both ICMP echo requests and TCP SYN packets to the target endpoints, providing both network-level and transport-level connectivity testing.
-
-### Example probe requests with TCP port specification:
+## Example probe requests for ICMP ping:
+When `tcp_port` is not provided as a URL parameter, ICMP packets are sent.
 ```
 # Probe with ICMP
 http://localhost:9116/probe?target=example.com
 
-# Probe with TCP port 443
-http://localhost:9116/probe?target=example.com&tcp_port=443
+# Probe multiple targets with ICMP
+http://localhost:9116/probe?target=example.com&target=google.com
+```
 
+## Example probe requests for TCP SYN ping:
+When `tcp_port` is provided as a URL parameter, TCP SYN packets are sent to the specified port.
+```
 # Probe with TCP port 22 (SSH)
 http://localhost:9116/probe?target=example.com&tcp_port=22
 
+# Probe with TCP port 80 and 443
+http://localhost:9116/probe?target=example.com&tcp_port=80&tcp_port=443
+
 # Probe multiple targets with TCP port 443
 http://localhost:9116/probe?target=example.com&target=google.com&tcp_port=443
+
+# Probe multiple targets with TCP port 80 and 443
+http://localhost:9116/probe?target=example.com&target=google.com&tcp_port=80&tcp_port=443
 ```
 
 # Network card support
@@ -173,6 +176,8 @@ CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/icmp-exporter-amd64 ./cmd/
 ```
 
 # Metrics
+Tcp metrics are the same as ICMP except starting with `tcp_`
+
 ### Loss
 Loss over the last `icmp_probe_samples_count`.
 ```
@@ -209,5 +214,16 @@ sqrt(
 )
 ```
 
-### TCP
-Tcp metrics are the same as ICMP except starting with `tcp_`
+### Meta
+The `/metrics` endpoint provides various meta metrics for monitoring the exporter itself:
+
+In addition to metrics starting with `icmp_` and `tcp_` there are metrics for the go runtime, http server, and process.
+
+- `icmp_active_probes`: Number of currently active ICMP probes
+- `icmp_packets_sent_total`: Total number of ICMP packets sent
+- `icmp_packets_recv_total`: Total number of ICMP packets received
+- `icmp_packets_error_total`: Total number of ICMP socket errors
+- `tcp_active_probes`: Number of currently active TCP probes
+- `tcp_packets_sent_total`: Total number of TCP SYN packets sent
+- `tcp_packets_recv_total`: Total number of TCP SYN/ACK packets received
+- `tcp_packets_error_total`: Total number of TCP socket errors

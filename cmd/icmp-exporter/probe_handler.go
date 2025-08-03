@@ -89,22 +89,31 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	// Parse TCP port parameter
 	// If TCP ports are specified, return TCP metrics
 	// If no TCP ports are specified, return ICMP metrics
-	tcpPorts := []uint16{}
-	if tcpPortStr := params.Get("tcp_port"); tcpPortStr != "" {
-		if port, err := strconv.Atoi(tcpPortStr); err == nil && port >= 1 && port <= 65535 {
-			tcpPorts = []uint16{uint16(port)}
-		} else {
-			w.Header().Set("Content-Type", "text/plain")
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write(([]byte)("# 400 - invalid tcp_port parameter"))
-			return
+	tcpPorts := make(map[uint16]struct{})
+	if params.Has("tcp_port") {
+		for _, tcpPortStr := range params["tcp_port"] {
+			port, err := strconv.Atoi(tcpPortStr)
+			if err != nil || port < 1 || port > 65535 {
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write(([]byte)("# 400 - invalid tcp_port parameter"))
+				return
+			}
+			tcpPorts[uint16(port)] = struct{}{}
 		}
 	}
 
 	// We still need to set tcpPorts when returning ICMP metrics
 	returnTcpMetrics := len(tcpPorts) > 0
 	if len(tcpPorts) == 0 {
-		tcpPorts = []uint16{0}
+		tcpPorts[0] = struct{}{}
+	}
+
+	if len(tcpPorts)*len(targets) > limit {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(([]byte)("# 400 - too many targets"))
+		return
 	}
 
 	registry := prometheus.NewRegistry()
@@ -216,7 +225,7 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 	// Process probes and populate metrics
 	for _, target := range targets {
 		// Process probes; when returning ICMP tcpPorts is ignored but has one element
-		for _, tcpPort := range tcpPorts {
+		for tcpPort := range tcpPorts {
 			job, new := GetProbe(target, tcpPort)
 			if new {
 				signal.Signal()
