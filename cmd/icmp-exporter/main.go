@@ -75,40 +75,38 @@ type Pinger interface {
 }
 
 type Settings struct {
-	iface4           string
-	iface6           string
-	useHardware      bool
-	listenAddr       string
-	timeout          int
-	interval         int
-	maxpps           int
-	dropCapabilities bool
-	identifier       int
+	iface4      string
+	iface6      string
+	useHardware bool
+	listenAddr  string
+	timeout     int
+	interval    int
+	maxpps      int
+	identifier  int
 }
 
 func parseArguments() Settings {
 	var errors []string
 	var settings Settings
 	defaults := Settings{
-		iface4:           "auto",
-		iface6:           "auto",
-		useHardware:      false,
-		listenAddr:       ":9116",
-		timeout:          3000,
-		interval:         2000,
-		maxpps:           10000,
-		dropCapabilities: false,
-		identifier:       0,
+		iface4:      "auto",
+		iface6:      "auto",
+		useHardware: false,
+		listenAddr:  ":9116",
+		timeout:     2000,
+		interval:    2000,
+		maxpps:      10000,
+		identifier:  0,
 	}
 
 	iWillBeGood := flag.Bool("i-wont-be-evil", false, "Unlocks advanced settings.")
 	flag.StringVar(&settings.iface4, "interface4", defaults.iface4, "IPv4 interface to bind to. If \"auto\" then the default route is used.")
 	flag.StringVar(&settings.iface6, "interface6", defaults.iface6, "IPv6 interface to bind to. If \"auto\" then the default route is used.")
 	flag.BoolVar(&settings.useHardware, "hard", defaults.useHardware, "Use hardware timestamping.")
-	flag.BoolVar(&settings.dropCapabilities, "drop", defaults.dropCapabilities, "Drop capabilities after starting.")
+	flag.BoolFunc("drop", "deprecated", func(s string) error { return nil })
 	flag.StringVar(&settings.listenAddr, "listen", defaults.listenAddr, "Ip and port to listen on.")
-	flag.IntVar(&settings.timeout, "timeout", defaults.timeout, "ICMP timout in milliseconds.")
-	flag.IntVar(&settings.interval, "interval", defaults.interval, "ICMP interval in milliseconds. Minimum 10. Must be unlocked.")
+	flag.IntVar(&settings.timeout, "timeout", defaults.timeout, "ICMP / TCP timeout in milliseconds.")
+	flag.IntVar(&settings.interval, "interval", defaults.interval, "ICMP / TCP interval in milliseconds. Minimum 10. Must be unlocked.")
 	flag.IntVar(&settings.maxpps, "maxpps", defaults.maxpps, "Maximum packets per second. Minimum 1. Must be unlocked.")
 	flag.IntVar(&settings.identifier, "identifier", defaults.identifier, "ICMP identifier between 0 and 65535. Must be unlocked. The possible options are:\n0 - Process pid (default)\n1 - Random")
 
@@ -179,7 +177,7 @@ func main() {
 	}
 
 	// Drop capabilities after binding
-	if settings.dropCapabilities {
+	{
 		// Read and display the capabilities of the running process
 		c := cap.GetProc()
 		log.Println("process started with caps:", c)

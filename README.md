@@ -14,7 +14,7 @@ The major difference from blackbox is that we use counters where possible and as
 ```
 Usage of icmp-exporter:
   -drop
-        Drop capabilities after starting.
+        deprecated
   -hard
         Use hardware timestamping.
   -i-wont-be-evil
@@ -28,14 +28,22 @@ Usage of icmp-exporter:
   -interface6 string
         IPv6 interface to bind to. If "auto" then the default route is used. (default "auto")
   -interval int
-        ICMP interval in milliseconds. Minimum 10. Must be unlocked. (default 2000)
+        ICMP / TCP interval in milliseconds. Minimum 10. Must be unlocked. (default 2000)
   -listen string
         Ip and port to listen on. (default ":9116")
   -maxpps int
         Maximum packets per second. Minimum 1. Must be unlocked. (default 10000)
   -timeout int
-        ICMP timout in milliseconds. (default 3000)
+        ICMP / TCP timeout in milliseconds. (default 2000)
 ```
+
+## Notes
+
+When using TCP SYN pings, if the SYN/ACK response is lost, TCP will retransmit the SYN packet. This retransmission can appear as increased latency in the results, rather than as packet loss. For this reason, it is recommended to set the `-timeout` value to 2000ms or less to minimize the impact of TCP retransmissions on latency measurements.
+
+If the interval is set to a value less than the timeout, new ping requests may be sent before previous ones have completed. This leads to several pings being in progress for the same host at the same time.
+
+When binding to an interface (using `-interface4` or `-interface6`), the exporter will attempt to determine the source IP address by querying the specified network interface for a routable unicast address. A routable unicast address is an IP address that is not a broadcast, multicast, loopback, or link-local. If the interface is set to `"auto"` (the default), the exporter will use the systems routing table default route to select the appropriate interface and source IP. The selected source IP is used for outgoing ICMP and TCP packets. If no suitable global unicast IP is found on the interface, the exporter will not transmit packets of that class. If the specified interface has multiple possible routable unicast IP addresses, the exporter may select any one of them for use.
 
 ## Running as non-root user
 `CAP_NET_ADMIN` and `CAP_NET_RAW` are required when running as an unprivlaged user.
