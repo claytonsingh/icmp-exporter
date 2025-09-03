@@ -39,7 +39,7 @@ Usage of icmp-exporter:
 
 ## Notes
 
-When using TCP SYN pings, if the SYN/ACK response is lost, TCP will retransmit the SYN packet. This retransmission can appear as increased latency in the results, rather than as packet loss. For this reason, it is recommended to set the `-timeout` value to 2000ms or less to minimize the impact of TCP retransmissions on latency measurements.
+When using TCP SYN pings, if the SYN/ACK response is lost, TCP will retransmit the SYN/ACK packet. This retransmission can appear as increased latency in the results, rather than as packet loss. For this reason, it is recommended to set the `-timeout` value to 2000ms or less to minimize the impact of TCP retransmissions on latency measurements.
 
 If the interval is set to a value less than the timeout, new ping requests may be sent before previous ones have completed. This leads to several pings being in progress for the same host at the same time.
 

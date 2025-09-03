@@ -22,6 +22,10 @@ var (
 	})
 )
 
+type Pinger interface {
+	SetProbes(probes []*PingProbe)
+}
+
 type Native struct {
 	ICMPNative  *ICMPNative
 	TCPNative   *TCPNative
@@ -143,4 +147,49 @@ func (this *Native) transmitThread() {
 			}
 		}
 	}
+}
+
+type PingProbe struct {
+	IPAddress        net.IP
+	TCPPort          uint16 // TCP destination port for SYN ping
+	SentCount        int32
+	RecvCount        int32
+	RoundtripTotal   int64 // In microseconds
+	RoundtripSqTotal int64 // In microseconds
+	Results          DataBuff[PingResult]
+	ResultLimit      int
+	LastAccess       time.Time
+	Mutex            sync.Mutex
+}
+
+func (this *PingProbe) AddSample(sample PingResult) {
+	this.Mutex.Lock()
+
+	// if we have sent many packets then reset all the counters to prevent loss of precision
+	if this.SentCount >= 0x7F000000 {
+		this.SentCount = 0
+		this.RecvCount = 0
+		this.RoundtripTotal = 0
+		this.RoundtripSqTotal = 0
+	}
+
+	this.SentCount += 1
+	this.ResultLimit += 1
+	if this.ResultLimit > this.Results.Size {
+		this.ResultLimit = this.Results.Size
+	}
+
+	this.Results.Append(sample)
+	if sample.Success {
+		this.RecvCount += 1
+		this.RoundtripTotal += sample.RountripTime
+		this.RoundtripSqTotal += sample.RountripTime * sample.RountripTime
+	}
+	this.Mutex.Unlock()
+}
+
+type PingResult struct {
+	Success      bool
+	RountripTime int64 // In microseconds
+	Timestamp    time.Time
 }

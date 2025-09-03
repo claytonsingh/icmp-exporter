@@ -6,7 +6,7 @@ toolchain go1.24.5
 
 require (
 	github.com/abursavich/nett v0.0.0-20150117192851-f31118c7aeb9
-	github.com/claytonsingh/golib/syncsignal v0.0.0-20240914221406-25ee94ec4aed
+	github.com/claytonsingh/golib/syncsignal v0.0.0-20250903052236-1cf36ee3c772
 	github.com/elliotchance/orderedmap/v2 v2.6.0
 	github.com/google/gopacket v1.1.19
 	github.com/prometheus/client_golang v1.20.5

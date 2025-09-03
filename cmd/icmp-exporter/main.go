@@ -18,61 +18,11 @@ import (
 	"kernel.org/pub/linux/libs/security/libcap/cap"
 )
 
-type PingProbe struct {
-	IPAddress        net.IP
-	TCPPort          uint16 // TCP destination port for SYN ping
-	SentCount        int32
-	RecvCount        int32
-	RoundtripTotal   int64 // In microseconds
-	RoundtripSqTotal int64 // In microseconds
-	Results          DataBuff[PingResult]
-	ResultLimit      int
-	LastAccess       time.Time
-	Mutex            sync.Mutex
-}
-
-func (this *PingProbe) AddSample(sample PingResult) {
-	this.Mutex.Lock()
-
-	// if we have sent many packets then reset all the counters to prevent loss of precision
-	if this.SentCount >= 0x7F000000 {
-		this.SentCount = 0
-		this.RecvCount = 0
-		this.RoundtripTotal = 0
-		this.RoundtripSqTotal = 0
-	}
-
-	this.SentCount += 1
-	this.ResultLimit += 1
-	if this.ResultLimit > this.Results.Size {
-		this.ResultLimit = this.Results.Size
-	}
-
-	this.Results.Append(sample)
-	if sample.Success {
-		this.RecvCount += 1
-		this.RoundtripTotal += sample.RountripTime
-		this.RoundtripSqTotal += sample.RountripTime * sample.RountripTime
-	}
-	this.Mutex.Unlock()
-}
-
-type PingResult struct {
-	Success      bool
-	RountripTime int64 // In microseconds
-	Timestamp    time.Time
-}
-
 var versionString = "unknown"
 var probeMap = sync.Map{}
 
 var signal = syncsignal.NewSignal()
 var resolver = nett.CacheResolver{TTL: 5 * time.Minute}
-var globalTcpPinger *TCPNative
-
-type Pinger interface {
-	SetProbes(probes []*PingProbe)
-}
 
 type Settings struct {
 	iface4      string
@@ -201,6 +151,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{}))
 	mux.Handle("/probe", http.HandlerFunc(ProbeHander))
+	mux.Handle("/debug/probes", http.HandlerFunc(DebugProbesHandler))
 	if err := http.Serve(ln, PromtheusMiddlewareHandler(mux)); err != nil {
 		panic(err)
 	}
@@ -270,9 +221,7 @@ func PruneMapThread() {
 }
 
 func UpdateProbesThread(p Pinger) {
-	Wait := signal.GetWaiter(true)
-	for {
-		Wait()
+	for wait := signal.GetWaiter(true); wait(); {
 		probes := make([]*PingProbe, 0)
 		probeMap.Range(func(key any, value any) bool {
 			if probe, ok := value.(*PingProbe); ok {

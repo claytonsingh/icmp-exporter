@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net"
@@ -502,32 +501,4 @@ func (this *TCPNative) errorThread6() {
 			}
 		}
 	}
-}
-
-func getInterfaceIP(iface string, ipv4 bool) (net.IP, error) {
-	netInterface, err := net.InterfaceByName(iface)
-	if err != nil {
-		return nil, err
-	}
-
-	addrs, err := netInterface.Addrs()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && ipnet.IP.IsGlobalUnicast() {
-			if ipv4 {
-				if ipnet.IP.To4() != nil {
-					return ipnet.IP.To4(), nil
-				}
-			} else {
-				if ipnet.IP.To16() != nil && IsIPv6(ipnet.IP) {
-					return ipnet.IP.To16(), nil
-				}
-			}
-		}
-	}
-
-	return nil, errors.New("no ip found")
 }
