@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/claytonsingh/icmp-exporter/netprobe"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -58,13 +59,13 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 			switch params.Get("ip_version") {
 			case "4":
 				for _, ip := range addresses {
-					if IsIPv4(ip) && ip.IsGlobalUnicast() {
+					if netprobe.IsIPv4(ip) && ip.IsGlobalUnicast() {
 						targets[string(ip)] = ip
 					}
 				}
 			case "6":
 				for _, ip := range addresses {
-					if IsIPv6(ip) && ip.IsGlobalUnicast() {
+					if netprobe.IsIPv6(ip) && ip.IsGlobalUnicast() {
 						targets[string(ip)] = ip
 					}
 				}
@@ -266,7 +267,7 @@ func ProbeHander(w http.ResponseWriter, r *http.Request) {
 			var bestLoss int = 0
 			var bestSumRTT int64 = 0
 			var bestSumRTT2 int64 = 0
-			var lastResult *PingResult
+			var lastResult *netprobe.PingResult
 			for n := range results {
 				r := &results[len(results)-1-n]
 

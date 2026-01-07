@@ -1,4 +1,4 @@
-package main
+package netprobe
 
 func ReadUInt64(buffer []byte, index int) uint64 {
 	var val uint64

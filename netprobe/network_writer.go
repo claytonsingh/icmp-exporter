@@ -1,4 +1,4 @@
-package main
+package netprobe
 
 type NetworkWriter struct {
 	buffer []byte

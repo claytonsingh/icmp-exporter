@@ -1,25 +1,12 @@
-package main
+package netprobe
 
 import (
 	"bytes"
 	"net"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-)
-
-var (
-	icmpActiveProbes = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "icmp_active_probes",
-		Help: "The number of active probes",
-	})
-	tcpActiveProbes = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "tcp_active_probes",
-		Help: "The number of active TCP probes",
-	})
 )
 
 type Pinger interface {
@@ -27,13 +14,15 @@ type Pinger interface {
 }
 
 type Native struct {
-	ICMPNative  *ICMPNative
-	TCPNative   *TCPNative
-	probeMutex  sync.Mutex
-	probes      []*PingProbe
-	interval    time.Duration
-	minInterval time.Duration
-	nextPacket  time.Time
+	ICMPNative       *ICMPNative
+	TCPNative        *TCPNative
+	probeMutex       sync.Mutex
+	probes           []*PingProbe
+	interval         time.Duration
+	minInterval      time.Duration
+	nextPacket       time.Time
+	icmpActiveProbes atomic.Int64
+	tcpActiveProbes  atomic.Int64
 }
 
 func NewNative(hardware bool, iface4 string, iface6 string, timeout int, interval int, maxpps int, identifier int, minPort uint16, maxPort uint16) *Native {
@@ -63,12 +52,12 @@ func (this *Native) SetProbes(probes []*PingProbe) {
 	})
 
 	// count the max number of probes with the same IP
-	maxIPCount := 0
-	icmpProbes := 0
-	tcpProbes := 0
+	var maxIPCount int64 = 0
+	var icmpProbes int64 = 0
+	var tcpProbes int64 = 0
 	{
 		lastIP := net.IP{}
-		ipCount := 0
+		var ipCount int64 = 0
 		for _, probe := range probesCopy {
 			if probe.TCPPort == 0 {
 				icmpProbes++
@@ -94,15 +83,15 @@ func (this *Native) SetProbes(probes []*PingProbe) {
 	probesShuffled := make([]*PingProbe, len(probes))
 	i := 0
 	for x := range maxIPCount {
-		for y := x; y < len(probesCopy); y += maxIPCount {
+		for y := x; y < int64(len(probesCopy)); y += maxIPCount {
 			probesShuffled[i] = probesCopy[y]
 			i += 1
 		}
 	}
 
 	this.probeMutex.Lock()
-	icmpActiveProbes.Set(float64(icmpProbes))
-	tcpActiveProbes.Set(float64(tcpProbes))
+	this.icmpActiveProbes.Store(icmpProbes)
+	this.tcpActiveProbes.Store(tcpProbes)
 	this.probes = probesShuffled
 	this.probeMutex.Unlock()
 }
@@ -147,6 +136,16 @@ func (this *Native) transmitThread() {
 			}
 		}
 	}
+}
+
+// GetICMPActiveProbes returns the number of currently active ICMP probes
+func (this *Native) GetICMPActiveProbes() int64 {
+	return this.icmpActiveProbes.Load()
+}
+
+// GetTCPActiveProbes returns the number of currently active TCP probes
+func (this *Native) GetTCPActiveProbes() int64 {
+	return this.tcpActiveProbes.Load()
 }
 
 type PingProbe struct {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/abursavich/nett"
 	"github.com/claytonsingh/golib/syncsignal"
+	"github.com/claytonsingh/icmp-exporter/netprobe"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"kernel.org/pub/linux/libs/security/libcap/cap"
@@ -63,10 +64,10 @@ func parseArguments() Settings {
 	flag.Parse()
 
 	if settings.iface4 == "auto" {
-		settings.iface4, _ = GetDefaultRouterInterface4()
+		settings.iface4, _ = netprobe.GetDefaultRouterInterface4()
 	}
 	if settings.iface6 == "auto" {
-		settings.iface6, _ = GetDefaultRouterInterface6()
+		settings.iface6, _ = netprobe.GetDefaultRouterInterface6()
 	}
 
 	if settings.iface4 != "" {
@@ -115,7 +116,8 @@ func main() {
 	log.Println("icmp-exporter version: ", versionString)
 	settings := parseArguments()
 
-	p := NewNative(settings.useHardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.maxpps, settings.identifier, 61000, 65500)
+	p := netprobe.NewNative(settings.useHardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.maxpps, settings.identifier, 61000, 65500)
+	RegisterPingerMetrics(p)
 	p.Start()
 	go UpdateProbesThread(p)
 
@@ -157,7 +159,7 @@ func main() {
 	}
 }
 
-func GetProbe(ip net.IP, tcpPort uint16) (*PingProbe, bool) {
+func GetProbe(ip net.IP, tcpPort uint16) (*netprobe.PingProbe, bool) {
 	var ipBytes [18]byte
 	ip = ip.To16()
 	copy(ipBytes[:16], ip[:])
@@ -167,20 +169,20 @@ func GetProbe(ip net.IP, tcpPort uint16) (*PingProbe, bool) {
 
 	// Create a unique key that includes both IP and TCP port
 	if untyped, ok := probeMap.Load(ipBytes); ok {
-		probe := untyped.(*PingProbe)
+		probe := untyped.(*netprobe.PingProbe)
 		probe.Mutex.Lock()
 		probe.LastAccess = now
 		probe.Mutex.Unlock()
 		return probe, false
 	} else {
-		new := &PingProbe{
+		new := &netprobe.PingProbe{
 			IPAddress:  ipBytes[:16],
 			TCPPort:    tcpPort,
-			Results:    NewDataBuff[PingResult](250),
+			Results:    netprobe.NewDataBuff[netprobe.PingResult](250),
 			LastAccess: now,
 		}
 		untyped, _ := probeMap.LoadOrStore(ipBytes, new)
-		probe := untyped.(*PingProbe)
+		probe := untyped.(*netprobe.PingProbe)
 		if probe == new {
 			signal.Signal()
 		} else {
@@ -199,7 +201,7 @@ func PruneMapThread() {
 		expire := time.Now().Add(time.Duration(-10 * 60 * time.Second))
 		doRebuild := false
 		probeMap.Range(func(key any, value any) bool {
-			if probe, ok := value.(*PingProbe); ok {
+			if probe, ok := value.(*netprobe.PingProbe); ok {
 
 				remove := false
 				probe.Mutex.Lock()
@@ -220,11 +222,11 @@ func PruneMapThread() {
 	}
 }
 
-func UpdateProbesThread(p Pinger) {
+func UpdateProbesThread(p netprobe.Pinger) {
 	for wait := signal.GetWaiter(true); wait(); {
-		probes := make([]*PingProbe, 0)
+		probes := make([]*netprobe.PingProbe, 0)
 		probeMap.Range(func(key any, value any) bool {
-			if probe, ok := value.(*PingProbe); ok {
+			if probe, ok := value.(*netprobe.PingProbe); ok {
 				probes = append(probes, probe)
 			}
 			return true

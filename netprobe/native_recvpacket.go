@@ -1,4 +1,4 @@
-package main
+package netprobe
 
 /*
 #include "native_recvpacket.h"

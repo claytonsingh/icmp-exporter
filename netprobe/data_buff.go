@@ -1,4 +1,4 @@
-package main
+package netprobe
 
 type DataBuff[T any] struct {
 	Size     int

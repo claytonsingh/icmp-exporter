@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"sort"
 	"time"
+
+	"github.com/claytonsingh/icmp-exporter/netprobe"
 )
 
 // DebugProbesHandler dumps all probe targets and their statistics
@@ -14,7 +16,7 @@ func DebugProbesHandler(w http.ResponseWriter, r *http.Request) {
 	probes := make([]map[string]any, 0)
 
 	probeMap.Range(func(key any, value any) bool {
-		if probe, ok := value.(*PingProbe); ok {
+		if probe, ok := value.(*netprobe.PingProbe); ok {
 			probe.Mutex.Lock()
 			probeInfo := map[string]any{
 				"ip_address":  probe.IPAddress.String(),

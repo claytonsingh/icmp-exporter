@@ -1,4 +1,4 @@
-package main
+package netprobe
 
 import (
 	"fmt"
@@ -8,29 +8,13 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/net/bpf"
 	syscall "golang.org/x/sys/unix"
-)
-
-var (
-	icmpTxPackets = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "icmp_packets_sent_total",
-		Help: "The total number of transmitted packets",
-	})
-	icmpRxPackets = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "icmp_packets_recv_total",
-		Help: "The total number of received packets",
-	})
-	icmpErPackets = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "icmp_packets_error_total",
-		Help: "The total number of error packets",
-	})
 )
 
 const (
@@ -63,6 +47,9 @@ type ICMPNative struct {
 	transmitBuffer gopacket.SerializeBuffer
 	SequenceNumber uint16
 	random         *rand.Rand
+	sentCount      atomic.Int64
+	recvCount      atomic.Int64
+	errorCount     atomic.Int64
 }
 
 func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, identifier uint16) *ICMPNative {
@@ -203,7 +190,7 @@ func (this *ICMPNative) timeoutThread() {
 			// Things like failed arp cause tx failures on sockets, so mark those as failed pings
 			if pinger.timestampSend == 0 || pinger.timestampSend == -1 {
 				// Increment sent packets counter
-				icmpTxPackets.Inc()
+				this.sentCount.Add(1)
 
 				pinger.probe.AddSample(PingResult{
 					Success:      false,
@@ -212,7 +199,7 @@ func (this *ICMPNative) timeoutThread() {
 				})
 			} else if pinger.timestampSend > 0 && pinger.timestampRecv != -1 && (pinger.timestampRecv == 0 || pinger.timestampSend <= pinger.timestampRecv) {
 				// Increment sent packets counter
-				icmpTxPackets.Inc()
+				this.sentCount.Add(1)
 
 				// if both sent and recv are set then we count it as a success
 				if pinger.timestampRecv > 0 {
@@ -221,7 +208,7 @@ func (this *ICMPNative) timeoutThread() {
 						RountripTime: pinger.timestampRecv - pinger.timestampSend,
 						Timestamp:    pinger.timestampStart,
 					})
-					icmpRxPackets.Inc()
+					this.recvCount.Add(1)
 				} else {
 					pinger.probe.AddSample(PingResult{
 						Success:      false,
@@ -232,7 +219,7 @@ func (this *ICMPNative) timeoutThread() {
 			} else {
 				// if there was an error dont count the packet
 				// fmt.Println(pinger.timestampSend, pinger.timestampRecv, pinger.probe.IPAddress)
-				icmpErPackets.Inc()
+				this.errorCount.Add(1)
 			}
 			pinger.mutex.Unlock()
 		}
@@ -561,4 +548,19 @@ func socket_set_flags(fd int, ipversion int, so_timestamping_flags int, so_times
 	}
 
 	return nil
+}
+
+// GetSentCount returns the total number of ICMP packets sent
+func (this *ICMPNative) GetSentCount() int64 {
+	return this.sentCount.Load()
+}
+
+// GetReceivedCount returns the total number of ICMP packets received
+func (this *ICMPNative) GetReceivedCount() int64 {
+	return this.recvCount.Load()
+}
+
+// GetErrorCount returns the total number of ICMP socket errors
+func (this *ICMPNative) GetErrorCount() int64 {
+	return this.errorCount.Load()
 }

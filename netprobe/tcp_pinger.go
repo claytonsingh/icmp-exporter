@@ -1,33 +1,17 @@
-package main
+package netprobe
 
 import (
 	"fmt"
 	"math/rand/v2"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/net/bpf"
 	syscall "golang.org/x/sys/unix"
-)
-
-var (
-	tcpTxPackets = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "tcp_packets_sent_total",
-		Help: "The total number of transmitted TCP packets",
-	})
-	tcpRxPackets = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "tcp_packets_recv_total",
-		Help: "The total number of received TCP packets",
-	})
-	tcpErPackets = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "tcp_packets_error_total",
-		Help: "The total number of TCP error packets",
-	})
 )
 
 var (
@@ -65,6 +49,9 @@ type TCPNative struct {
 	srcPortMax     uint16
 	transmitBuffer gopacket.SerializeBuffer
 	random         *rand.Rand
+	sentCount      atomic.Int64
+	recvCount      atomic.Int64
+	errorCount     atomic.Int64
 }
 
 func NewTCPNative(hardware bool, iface4 string, iface6 string, timeout int, identifier uint16, minPort uint16, maxPort uint16) *TCPNative {
@@ -207,7 +194,7 @@ func (this *TCPNative) timeoutThread() {
 			// Things like failed arp cause tx failures on sockets, so mark those as failed pings
 			if pinger.timestampSend == 0 || pinger.timestampSend == -1 {
 				// Increment sent packets counter
-				tcpTxPackets.Inc()
+				this.sentCount.Add(1)
 
 				pinger.probe.AddSample(PingResult{
 					Success:      false,
@@ -216,7 +203,7 @@ func (this *TCPNative) timeoutThread() {
 				})
 			} else if pinger.timestampSend > 0 && pinger.timestampRecv != -1 && (pinger.timestampRecv == 0 || pinger.timestampSend <= pinger.timestampRecv) {
 				// Increment sent packets counter
-				tcpTxPackets.Inc()
+				this.sentCount.Add(1)
 
 				// if both sent and recv are set then we count it as a success
 				if pinger.timestampRecv > 0 {
@@ -225,7 +212,7 @@ func (this *TCPNative) timeoutThread() {
 						RountripTime: pinger.timestampRecv - pinger.timestampSend,
 						Timestamp:    pinger.timestampStart,
 					})
-					tcpRxPackets.Inc()
+					this.recvCount.Add(1)
 				} else {
 					pinger.probe.AddSample(PingResult{
 						Success:      false,
@@ -235,7 +222,7 @@ func (this *TCPNative) timeoutThread() {
 				}
 			} else {
 				// if there was an error dont count the packet
-				tcpErPackets.Inc()
+				this.errorCount.Add(1)
 			}
 			pinger.mutex.Unlock()
 		}
@@ -501,4 +488,19 @@ func (this *TCPNative) errorThread6() {
 			}
 		}
 	}
+}
+
+// GetSentCount returns the total number of TCP packets sent
+func (this *TCPNative) GetSentCount() int64 {
+	return this.sentCount.Load()
+}
+
+// GetReceivedCount returns the total number of TCP packets received
+func (this *TCPNative) GetReceivedCount() int64 {
+	return this.recvCount.Load()
+}
+
+// GetErrorCount returns the total number of TCP socket errors
+func (this *TCPNative) GetErrorCount() int64 {
+	return this.errorCount.Load()
 }
