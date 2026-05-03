@@ -59,7 +59,7 @@ func parseArguments() Settings {
 	flag.IntVar(&settings.timeout, "timeout", defaults.timeout, "ICMP / TCP timeout in milliseconds.")
 	flag.IntVar(&settings.interval, "interval", defaults.interval, "ICMP / TCP interval in milliseconds. Minimum 10. Must be unlocked.")
 	flag.IntVar(&settings.maxpps, "maxpps", defaults.maxpps, "Maximum packets per second. Minimum 1. Must be unlocked.")
-	flag.IntVar(&settings.identifier, "identifier", defaults.identifier, "ICMP identifier between 0 and 65535. Must be unlocked. The possible options are:\n0 - Process pid (default)\n1 - Random")
+	flag.IntVar(&settings.identifier, "identifier", defaults.identifier, "ICMP identifier. Must be unlocked. The possible options are:\n0         : Process pid (default)\n1         : Random\n2 - 65535 : Explicitly set the identifier")
 
 	flag.Parse()
 

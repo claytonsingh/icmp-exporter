@@ -10,6 +10,15 @@ The major difference from blackbox is that we use counters where possible and as
 - **IPv4/IPv6 Support**: Full dual-stack support for both ICMP and TCP
 - **Prometheus Integration**: Clean metrics export with proper labeling
 
+## License
+This project is released under **MIT + Commons Clause** (see [`LICENSE`](LICENSE)).
+
+You are welcome to use, modify, self-host, or use this software commercially within your business.
+
+What is not allowed under Commons Clause is selling this software itself, or offering a paid service whose value derives primarily from this software, without a separate commercial agreement.
+
+Free software takes love, effort, and time to maintain. All developers deserve to eat.
+
 # Command line
 ```
 Usage of icmp-exporter:
@@ -20,9 +29,10 @@ Usage of icmp-exporter:
   -i-wont-be-evil
         Unlocks advanced settings.
   -identifier int
-        ICMP identifier between 0 and 65535. Must be unlocked. The possible options are:
-        0 - Process pid (default)
-        1 - Random
+        ICMP identifier. Must be unlocked. The possible options are:
+        0         : Process pid (default)
+        1         : Random
+        2 - 65535 : Explicitly set the identifier
   -interface4 string
         IPv4 interface to bind to. If "auto" then the default route is used. (default "auto")
   -interface6 string
@@ -51,7 +61,7 @@ When binding to an interface (using `-interface4` or `-interface6`), the exporte
 sudo setcap 'CAP_NET_ADMIN,CAP_NET_RAW=ep' /opt/icmp-exporter/icmp-exporter-linux-x64
 ```
 ```
-/opt/icmp-exporter/icmp-exporter-linux-x64 -hard -drop -listen 127.0.0.1:9116
+/opt/icmp-exporter/icmp-exporter-linux-x64 -hard -listen 127.0.0.1:9116
 ```
 
 ## Running with systemd
@@ -65,6 +75,7 @@ systemctl enable icmp-exporter.service
 ```
 target
         The ip or hostname you want to ping. Can be repeated.
+        For hostnames, all resolved IP addresses are collected (filtered by `ip_version`).
 ip_version
         What version of ip you want to use when resolving dns records, defaults to all.
         `4`: to resolve only ipv4 addresses
@@ -79,7 +90,7 @@ tcp_port
 ICMP
 ```
 scrape_configs:
-  - job_name: 'Packet Loss Exporter'
+  - job_name: 'ICMP Packet Loss Exporter'
     metrics_path: /probe
     relabel_configs:
       - target_label: __param_target
@@ -96,7 +107,7 @@ scrape_configs:
 TCP
 ```
 scrape_configs:
-  - job_name: 'Packet Loss Exporter'
+  - job_name: 'TCP Packet Loss Exporter'
     metrics_path: /probe
     params:
       tcp_port: ['80', '443']
