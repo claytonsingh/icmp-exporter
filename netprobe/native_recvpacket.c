@@ -74,30 +74,45 @@ int socket_set_ioctl(int sock, char* ifname, int so_timestamping_flags)
 		return -4;
 	}
 
-	struct hwtstamp_config hwconfig, hwconfig_requested;
-	ifr.ifr_data = (void *)&hwconfig;
-	memset(&hwconfig, 0, sizeof(hwconfig));
-	hwconfig.tx_type   = (so_timestamping_flags & SOF_TIMESTAMPING_TX_HARDWARE) ? HWTSTAMP_TX_ON : HWTSTAMP_TX_OFF;
-	hwconfig.rx_filter = (so_timestamping_flags & SOF_TIMESTAMPING_RX_HARDWARE) ? HWTSTAMP_FILTER_ALL : HWTSTAMP_FILTER_NONE;
+	// We only enable hardware time stamping if requested
+	if (so_timestamping_flags & SOF_TIMESTAMPING_RX_HARDWARE || so_timestamping_flags & SOF_TIMESTAMPING_TX_HARDWARE) {
+		struct hwtstamp_config hwconfig, hwconfig_requested;
+		ifr.ifr_data = (void *)&hwconfig;
+		memset(&hwconfig, 0, sizeof(hwconfig));
 
-	hwconfig_requested = hwconfig;
+		int have_current_config = 0;
+		if (ioctl(sock, SIOCGHWTSTAMP, &ifr) == 0) {
+			have_current_config = 1;
+		}
 
-	if (ioctl(sock, SIOCSHWTSTAMP, &ifr) < 0)
-	{
-		if ((errno == EINVAL || errno == ENOTSUP) && hwconfig_requested.tx_type == HWTSTAMP_TX_OFF && hwconfig_requested.rx_filter == HWTSTAMP_FILTER_NONE)
-		{
-			printf("SIOCSHWTSTAMP: disabling hardware time stamping not possible\n");
+		if (!have_current_config || hwconfig.tx_type != HWTSTAMP_TX_ON || hwconfig.rx_filter != HWTSTAMP_FILTER_ALL) {
+			hwconfig.tx_type   = HWTSTAMP_TX_ON;      // (so_timestamping_flags & SOF_TIMESTAMPING_TX_HARDWARE) ? HWTSTAMP_TX_ON : HWTSTAMP_TX_OFF;
+			hwconfig.rx_filter = HWTSTAMP_FILTER_ALL; // (so_timestamping_flags & SOF_TIMESTAMPING_RX_HARDWARE) ? HWTSTAMP_FILTER_ALL : HWTSTAMP_FILTER_NONE;
+	
+			hwconfig_requested = hwconfig;
+	
+			if (ioctl(sock, SIOCSHWTSTAMP, &ifr) < 0)
+			{
+				if ((errno == EINVAL || errno == ENOTSUP) && hwconfig_requested.tx_type == HWTSTAMP_TX_OFF && hwconfig_requested.rx_filter == HWTSTAMP_FILTER_NONE)
+				{
+					printf("SIOCSHWTSTAMP: disabling hardware time stamping not possible\n");
+				}
+				else
+				{
+					return -2;
+				}
+			}
+	
+			printf("SIOCSHWTSTAMP: tx_type %d requested, got %d; rx_filter %d requested, got %d\n",
+				hwconfig_requested.tx_type, hwconfig.tx_type,
+				hwconfig_requested.rx_filter, hwconfig.rx_filter
+			);
 		}
 		else
 		{
-			return -2;
+			printf("SIOCSHWTSTAMP: hardware time stamping already enabled\n");
 		}
 	}
-
-	printf("SIOCSHWTSTAMP: tx_type %d requested, got %d; rx_filter %d requested, got %d\n",
-		hwconfig_requested.tx_type, hwconfig.tx_type,
-		hwconfig_requested.rx_filter, hwconfig.rx_filter
-	);
 
 	return 1;
 }

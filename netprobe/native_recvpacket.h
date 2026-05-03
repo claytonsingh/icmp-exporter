@@ -32,6 +32,9 @@
     # define SIOCSHWTSTAMP 0x89b0
 #endif
 
+#ifndef SIOCGHWTSTAMP
+    # define SIOCGHWTSTAMP 0x89b1
+#endif
 
 int recvpacket_v4(int32_t sock, uint8_t* name, uint8_t* data, uint32_t data_len, int64_t* u_seconds, int32_t recvmsg_flags, int32_t timestamp_type);
 int socket_set_ioctl(int sock, char* ifname, int so_timestamping_flags);
