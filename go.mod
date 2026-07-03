@@ -1,8 +1,6 @@
 module github.com/claytonsingh/icmp-exporter
 
-go 1.23.0
-
-toolchain go1.24.5
+go 1.25.0
 
 require (
 	github.com/abursavich/nett v0.0.0-20150117192851-f31118c7aeb9
@@ -10,8 +8,8 @@ require (
 	github.com/elliotchance/orderedmap/v2 v2.6.0
 	github.com/google/gopacket v1.1.19
 	github.com/prometheus/client_golang v1.20.5
-	golang.org/x/net v0.38.0
-	golang.org/x/sys v0.31.0
+	golang.org/x/net v0.55.0
+	golang.org/x/sys v0.45.0
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.73
 )
 
