@@ -37,6 +37,7 @@ type ICMPNative struct {
 	nativePinger   *SafeOrderedMap[uint64, *nativePinger]
 	started        bool
 	timeout        time.Duration
+	receiveBuffer  int
 	identifier     uint16
 	timestampType  int
 	timestampFlags int
@@ -52,10 +53,11 @@ type ICMPNative struct {
 	errorCount     atomic.Int64
 }
 
-func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, identifier uint16) *ICMPNative {
+func NewICMPNative(hardware bool, iface4 string, iface6 string, timeout int, identifier uint16, receiveBuffer int) *ICMPNative {
 	var this ICMPNative
 	this.nativePinger = NewSafeOrderedMap[uint64, *nativePinger]()
 	this.timeout = time.Duration(timeout) * time.Millisecond
+	this.receiveBuffer = receiveBuffer
 	this.interface4 = iface4
 	this.interface6 = iface6
 	this.transmitBuffer = gopacket.NewSerializeBuffer()
@@ -94,6 +96,9 @@ func (this *ICMPNative) Start() {
 			this.socket4 = socket
 		}
 
+		if err := socket_set_recv_buffer(this.socket4, this.receiveBuffer, "ICMP IPv4"); err != nil {
+			panic(err)
+		}
 		if err := socket_set_ioctl_native(this.socket4, this.interface4, this.timestampFlags); err < 0 {
 			panic(err)
 		}
@@ -132,6 +137,9 @@ func (this *ICMPNative) Start() {
 			panic(err)
 		} else {
 			this.socket6 = socket
+		}
+		if err := socket_set_recv_buffer(this.socket6, this.receiveBuffer, "ICMP IPv6"); err != nil {
+			panic(err)
 		}
 
 		if err := socket_set_ioctl_native(this.socket6, this.interface6, this.timestampFlags); err < 0 {
@@ -547,6 +555,25 @@ func socket_set_flags(fd int, ipversion int, so_timestamping_flags int, so_times
 		}
 	}
 
+	return nil
+}
+
+//lint:ignore ST1003 match c api
+func socket_set_recv_buffer(fd int, size int, name string) error {
+	if size > 0 {
+		if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, size); err != nil {
+			return fmt.Errorf("set %s receive buffer: %w", name, err)
+		}
+	}
+	actual, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF)
+	if err != nil {
+		return fmt.Errorf("read %s receive buffer: %w", name, err)
+	}
+	if size > 0 {
+		log.Printf("%s receive buffer: requested %d bytes, effective %d bytes", name, size, actual)
+	} else {
+		log.Printf("%s receive buffer: using system default, effective %d bytes", name, actual)
+	}
 	return nil
 }
 

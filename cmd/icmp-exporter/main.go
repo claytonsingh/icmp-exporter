@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -26,14 +28,15 @@ var signal = syncsignal.NewSignal()
 var resolver = nett.CacheResolver{TTL: 5 * time.Minute}
 
 type Settings struct {
-	iface4      string
-	iface6      string
-	useHardware bool
-	listenAddr  string
-	timeout     int
-	interval    int
-	maxpps      int
-	identifier  int
+	iface4       string
+	iface6       string
+	useHardware  bool
+	listenAddr   string
+	timeout      int
+	interval     int
+	maxpps       int
+	identifier   int
+	recvBuffer int
 }
 
 func parseArguments() Settings {
@@ -60,6 +63,7 @@ func parseArguments() Settings {
 	flag.IntVar(&settings.interval, "interval", defaults.interval, "ICMP / TCP interval in milliseconds. Minimum 10. Must be unlocked.")
 	flag.IntVar(&settings.maxpps, "maxpps", defaults.maxpps, "Maximum packets per second. Minimum 1. Must be unlocked.")
 	flag.IntVar(&settings.identifier, "identifier", defaults.identifier, "ICMP identifier. Must be unlocked. The possible options are:\n0         : Process pid (default)\n1         : Random\n2 - 65535 : Explicitly set the identifier")
+	flag.IntVar(&settings.recvBuffer, "recvbuffer", 0, "Receive socket buffer size in kiB for ICMP and TCP (0 uses the system default).")
 
 	flag.Parse()
 
@@ -83,6 +87,10 @@ func parseArguments() Settings {
 
 	if settings.iface4 == "" && settings.iface6 == "" {
 		errors = append(errors, "interface4 and interface6 is not set")
+	}
+
+	if settings.recvBuffer < 0 || settings.recvBuffer > math.MaxInt32/1024 {
+		errors = append(errors, fmt.Sprintf("recvbuffer must be between 0 and %d kB", math.MaxInt32/1024))
 	}
 
 	if *iWillBeGood {
@@ -116,7 +124,7 @@ func main() {
 	log.Println("icmp-exporter version: ", versionString)
 	settings := parseArguments()
 
-	p := netprobe.NewNative(settings.useHardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.maxpps, settings.identifier, 61000, 65500)
+	p := netprobe.NewNative(settings.useHardware, settings.iface4, settings.iface6, settings.timeout, settings.interval, settings.maxpps, settings.identifier, 61000, 65500, settings.recvBuffer*1024)
 	RegisterPingerMetrics(p)
 	p.Start()
 	go UpdateProbesThread(p)

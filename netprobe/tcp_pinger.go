@@ -39,6 +39,7 @@ type TCPNative struct {
 	tcpPinger      *SafeOrderedMap[uint64, *tcpPinger]
 	started        bool
 	timeout        time.Duration
+	receiveBuffer  int
 	timestampType  int
 	timestampFlags int
 	interface4     string
@@ -54,10 +55,11 @@ type TCPNative struct {
 	errorCount     atomic.Int64
 }
 
-func NewTCPNative(hardware bool, iface4 string, iface6 string, timeout int, identifier uint16, minPort uint16, maxPort uint16) *TCPNative {
+func NewTCPNative(hardware bool, iface4 string, iface6 string, timeout int, identifier uint16, minPort uint16, maxPort uint16, receiveBuffer int) *TCPNative {
 	var this TCPNative
 	this.tcpPinger = NewSafeOrderedMap[uint64, *tcpPinger]()
 	this.timeout = time.Duration(timeout) * time.Millisecond
+	this.receiveBuffer = receiveBuffer
 	this.interface4 = iface4
 	this.interface6 = iface6
 	this.transmitBuffer = gopacket.NewSerializeBuffer()
@@ -91,6 +93,9 @@ func (this *TCPNative) Start() {
 			this.socket4 = socket
 		}
 
+		if err := socket_set_recv_buffer(this.socket4, this.receiveBuffer, "TCP IPv4"); err != nil {
+			panic(err)
+		}
 		if err := socket_set_ioctl_native(this.socket4, this.interface4, this.timestampFlags); err < 0 {
 			panic(err)
 		}
@@ -134,6 +139,9 @@ func (this *TCPNative) Start() {
 			panic(err)
 		} else {
 			this.socket6 = socket
+		}
+		if err := socket_set_recv_buffer(this.socket6, this.receiveBuffer, "TCP IPv6"); err != nil {
+			panic(err)
 		}
 
 		if err := socket_set_ioctl_native(this.socket6, this.interface6, this.timestampFlags); err < 0 {
