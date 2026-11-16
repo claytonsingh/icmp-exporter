@@ -43,6 +43,8 @@ Usage of icmp-exporter:
         Ip and port to listen on. (default ":9116")
   -maxpps int
         Maximum packets per second. Minimum 1. Must be unlocked. (default 10000)
+  -recvbuffer int
+        Receive socket buffer size in kiB for ICMP and TCP (0 uses the system default).
   -timeout int
         ICMP / TCP timeout in milliseconds. (default 2000)
 ```

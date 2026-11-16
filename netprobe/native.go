@@ -25,10 +25,10 @@ type Native struct {
 	tcpActiveProbes  atomic.Int64
 }
 
-func NewNative(hardware bool, iface4 string, iface6 string, timeout int, interval int, maxpps int, identifier int, minPort uint16, maxPort uint16) *Native {
+func NewNative(hardware bool, iface4 string, iface6 string, timeout int, interval int, maxpps int, identifier int, minPort uint16, maxPort uint16, receiveBuffer int) *Native {
 	return &Native{
-		ICMPNative:  NewICMPNative(hardware, iface4, iface6, timeout, uint16(identifier)),
-		TCPNative:   NewTCPNative(hardware, iface4, iface6, timeout, uint16(identifier), minPort, maxPort),
+		ICMPNative:  NewICMPNative(hardware, iface4, iface6, timeout, uint16(identifier), receiveBuffer),
+		TCPNative:   NewTCPNative(hardware, iface4, iface6, timeout, uint16(identifier), minPort, maxPort, receiveBuffer),
 		interval:    time.Duration(interval) * time.Millisecond,
 		minInterval: time.Duration(float64(time.Second) / float64(maxpps)),
 		nextPacket:  time.Now(),
