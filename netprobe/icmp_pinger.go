@@ -2,7 +2,6 @@ package netprobe
 
 import (
 	"fmt"
-	"log"
 	"math/rand/v2"
 	"net"
 	"os"
@@ -99,7 +98,7 @@ func (this *ICMPNative) Start() {
 		if err := socket_set_recv_buffer(this.socket4, this.receiveBuffer, "ICMP IPv4"); err != nil {
 			panic(err)
 		}
-		if err := socket_set_ioctl_native(this.socket4, this.interface4, this.timestampFlags); err < 0 {
+		if err := socketSetInterface(this.socket4, this.interface4, this.timestampFlags); err != nil {
 			panic(err)
 		}
 		if err := socket_set_flags(this.socket4, 4, this.timestampFlags, 0, 0); err != nil {
@@ -142,7 +141,7 @@ func (this *ICMPNative) Start() {
 			panic(err)
 		}
 
-		if err := socket_set_ioctl_native(this.socket6, this.interface6, this.timestampFlags); err < 0 {
+		if err := socketSetInterface(this.socket6, this.interface6, this.timestampFlags); err != nil {
 			panic(err)
 		}
 		if err := socket_set_flags(this.socket6, 6, this.timestampFlags, 0, 0); err != nil {
@@ -326,17 +325,6 @@ func (this *ICMPNative) Transmit(probe *PingProbe) {
 	}
 }
 
-func readSocket(sock int, data []byte, timestampType int) (ip net.IP, ndata int, ts int64) {
-	for {
-		ip, ndata, ts = recvpacket_v4(sock, data, 0, timestampType)
-		if ndata < 0 {
-			panic(ndata)
-		} else if ip != nil {
-			return ip, ndata, ts
-		}
-	}
-}
-
 func (this *ICMPNative) receiveIcmp4() {
 	var ip4 layers.IPv4
 	var ic4 layers.ICMPv4
@@ -409,22 +397,6 @@ func (this *ICMPNative) receiveIcmp6() {
 	}
 }
 
-func readSocketErr(sock int, data []byte, timestampType int) (ip net.IP, ndata int, ts int64) {
-	fds := []syscall.PollFd{{Fd: int32(sock), Events: syscall.POLLERR}}
-	for {
-		_, ndata, ts = recvpacket_v4(sock, data, syscall.MSG_ERRQUEUE|syscall.MSG_DONTWAIT, timestampType)
-		if ndata == -1 {
-			syscall.Poll(fds, 2100)
-			continue
-		} else if ndata < 0 {
-			panic(ndata)
-		} else if ndata == 0 {
-			continue
-		}
-		return ip, ndata, ts
-	}
-}
-
 func (this *ICMPNative) errorIcmp4() {
 	var eth layers.Ethernet
 	var ip4 layers.IPv4
@@ -491,90 +463,6 @@ func (this *ICMPNative) errorIcmp6() {
 			fmt.Println("er err ", err)
 		}
 	}
-}
-
-//lint:ignore ST1003 match c api
-func socket_set_flags(fd int, ipversion int, so_timestamping_flags int, so_timestamp int, so_timestampns int) error {
-
-	if so_timestamp > 0 {
-		if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_TIMESTAMP, 1); err != nil {
-			panic(err)
-		}
-
-		if val, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_TIMESTAMP); err != nil {
-			panic(err)
-		} else {
-			log.Printf("SO_TIMESTAMP:    %v %v\n", val, 1)
-		}
-	}
-
-	if so_timestampns > 0 {
-		if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_TIMESTAMPNS, 1); err != nil {
-			panic(err)
-		}
-
-		if val, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_TIMESTAMPNS); err != nil {
-			panic(err)
-		} else {
-			log.Printf("SO_TIMESTAMPNS:  %v %v\n", val, 1)
-		}
-	}
-
-	if so_timestamping_flags > 0 {
-		if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_TIMESTAMPING, so_timestamping_flags); err != nil {
-			panic(err)
-		}
-
-		if val, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_TIMESTAMPING); err != nil {
-			panic(err)
-		} else {
-			log.Printf("SO_TIMESTAMPING: %v %v\n", val, so_timestamping_flags)
-		}
-	}
-
-	if false {
-		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_IPV6, syscall.IPV6_V6ONLY, 0); err != nil {
-			panic(err)
-		}
-
-		if val, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.IPV6_V6ONLY); err != nil {
-			panic(err)
-		} else {
-			log.Printf("IPV6_V6ONLY: %v %v\n", val, 0)
-		}
-	}
-
-	switch ipversion {
-	case 4:
-		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_IP, syscall.IP_HDRINCL, 1); err != nil {
-			return err
-		}
-	case 6:
-		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_IPV6, syscall.IPV6_HDRINCL, 1); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-//lint:ignore ST1003 match c api
-func socket_set_recv_buffer(fd int, size int, name string) error {
-	if size > 0 {
-		if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, size); err != nil {
-			return fmt.Errorf("set %s receive buffer: %w", name, err)
-		}
-	}
-	actual, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF)
-	if err != nil {
-		return fmt.Errorf("read %s receive buffer: %w", name, err)
-	}
-	if size > 0 {
-		log.Printf("%s receive buffer: requested %d bytes, effective %d bytes", name, size, actual)
-	} else {
-		log.Printf("%s receive buffer: using system default, effective %d bytes", name, actual)
-	}
-	return nil
 }
 
 // GetSentCount returns the total number of ICMP packets sent
