@@ -2,8 +2,6 @@ package netprobe
 
 import (
 	"errors"
-	"runtime"
-	"unsafe"
 
 	"golang.org/x/net/bpf"
 	syscall "golang.org/x/sys/unix"
@@ -15,30 +13,21 @@ type BpfFilter []bpf.Instruction
 
 // ApplyTo sets the filter on the provided file descriptor
 func (filter BpfFilter) ApplyTo(fd int) (err error) {
-	if len(filter) > 0xFFFF {
-		return errors.New("bpf filter is has too many instructions")
+	if len(filter) == 0 || len(filter) > 0xFFFF {
+		return errors.New("bpf filter must contain between 1 and 65535 instructions")
 	}
-
-	var pinner runtime.Pinner
-	defer pinner.Unpin()
 
 	f, e := bpf.Assemble(filter)
 	if e != nil {
 		return e
 	}
-	pinner.Pin(&f)
-
+	filters := make([]syscall.SockFilter, len(f))
+	for i, instruction := range f {
+		filters[i] = syscall.SockFilter{Code: instruction.Op, Jt: instruction.Jt, Jf: instruction.Jf, K: instruction.K}
+	}
 	var program = syscall.SockFprog{
 		Len:    uint16(len(f)),
-		Filter: (*syscall.SockFilter)(unsafe.Pointer(&f[0])),
+		Filter: &filters[0],
 	}
-	pinner.Pin(&program)
-
-	if _, _, errno := syscall.Syscall6(syscall.SYS_SETSOCKOPT,
-		uintptr(fd), uintptr(syscall.SOL_SOCKET), uintptr(syscall.SO_ATTACH_FILTER),
-		uintptr(unsafe.Pointer(&program)), uintptr(syscall.SizeofSockFprog), 0); errno != 0 {
-		return errno
-	}
-
-	return nil
+	return syscall.SetsockoptSockFprog(fd, syscall.SOL_SOCKET, syscall.SO_ATTACH_FILTER, &program)
 }

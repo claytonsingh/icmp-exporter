@@ -96,7 +96,7 @@ func (this *TCPNative) Start() {
 		if err := socket_set_recv_buffer(this.socket4, this.receiveBuffer, "TCP IPv4"); err != nil {
 			panic(err)
 		}
-		if err := socket_set_ioctl_native(this.socket4, this.interface4, this.timestampFlags); err < 0 {
+		if err := socketSetInterface(this.socket4, this.interface4, this.timestampFlags); err != nil {
 			panic(err)
 		}
 		if err := socket_set_flags(this.socket4, 4, this.timestampFlags, 0, 0); err != nil {
@@ -144,7 +144,7 @@ func (this *TCPNative) Start() {
 			panic(err)
 		}
 
-		if err := socket_set_ioctl_native(this.socket6, this.interface6, this.timestampFlags); err < 0 {
+		if err := socketSetInterface(this.socket6, this.interface6, this.timestampFlags); err != nil {
 			panic(err)
 		}
 		if err := socket_set_flags(this.socket6, 6, this.timestampFlags, 0, 0); err != nil {
@@ -351,10 +351,8 @@ func (this *TCPNative) receiveThread4() {
 
 	data := make([]byte, syscall.Getpagesize())
 	for {
-		ip, ndata, ts := recvpacket_v4(this.socket4, data, 0, this.timestampType)
-		if ndata < 0 {
-			panic(ndata)
-		} else if ip != nil {
+		ip, ndata, ts := readSocket(this.socket4, data, this.timestampType)
+		if ip != nil {
 			decoded := []gopacket.LayerType{}
 			if err := parser4.DecodeLayers(data[:ndata], &decoded); err == nil {
 				for _, layer := range decoded {
@@ -387,10 +385,8 @@ func (this *TCPNative) receiveThread6() {
 
 	data := make([]byte, syscall.Getpagesize())
 	for {
-		ip, ndata, ts := recvpacket_v4(this.socket6, data, 0, this.timestampType)
-		if ndata < 0 {
-			panic(ndata)
-		} else if ip != nil {
+		ip, ndata, ts := readSocket(this.socket6, data, this.timestampType)
+		if ip != nil {
 			decoded := []gopacket.LayerType{}
 			if err := parser6.DecodeLayers(data[:ndata], &decoded); err == nil {
 				for _, layer := range decoded {
@@ -424,34 +420,26 @@ func (this *TCPNative) errorThread4() {
 
 	data := make([]byte, syscall.Getpagesize())
 	for {
-		_, ndata, ts := recvpacket_v4(this.socket4, data, syscall.MSG_ERRQUEUE|syscall.MSG_DONTWAIT, this.timestampType)
-		if ndata == -1 {
-			fds := []syscall.PollFd{{Fd: int32(this.socket4), Events: syscall.POLLERR}}
-			syscall.Poll(fds, 2100)
-			continue
-		} else if ndata < 0 {
-			panic(ndata)
-		} else {
-			decoded := []gopacket.LayerType{}
-			if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
-				for _, layer := range decoded {
-					if layer == layers.LayerTypeTCP {
-						// Read the sequence number from the packet
-						id := uint64(tcp.SrcPort)<<32 + uint64(tcp.Seq)
-						np, ok := this.tcpPinger.Get(id)
+		_, ndata, ts := readSocketErr(this.socket4, data, this.timestampType)
+		decoded := []gopacket.LayerType{}
+		if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
+			for _, layer := range decoded {
+				if layer == layers.LayerTypeTCP {
+					// Read the sequence number from the packet
+					id := uint64(tcp.SrcPort)<<32 + uint64(tcp.Seq)
+					np, ok := this.tcpPinger.Get(id)
 
-						if ok && tcp.DstPort == layers.TCPPort(np.probe.TCPPort) && tcp.SrcPort == layers.TCPPort(np.packet.SourcePort) && ip4.DstIP.Equal(np.probe.IPAddress) {
-							np.mutex.Lock()
-							if np.timestampSend == 0 {
-								np.timestampSend = ts
-							}
-							np.mutex.Unlock()
+					if ok && tcp.DstPort == layers.TCPPort(np.probe.TCPPort) && tcp.SrcPort == layers.TCPPort(np.packet.SourcePort) && ip4.DstIP.Equal(np.probe.IPAddress) {
+						np.mutex.Lock()
+						if np.timestampSend == 0 {
+							np.timestampSend = ts
 						}
+						np.mutex.Unlock()
 					}
 				}
-			} else {
-				fmt.Println("tcp er err ", err)
 			}
+		} else {
+			fmt.Println("tcp er err ", err)
 		}
 	}
 }
@@ -466,34 +454,26 @@ func (this *TCPNative) errorThread6() {
 
 	data := make([]byte, syscall.Getpagesize())
 	for {
-		_, ndata, ts := recvpacket_v4(this.socket6, data, syscall.MSG_ERRQUEUE|syscall.MSG_DONTWAIT, this.timestampType)
-		if ndata == -1 {
-			fds := []syscall.PollFd{{Fd: int32(this.socket6), Events: syscall.POLLERR}}
-			syscall.Poll(fds, 2100)
-			continue
-		} else if ndata < 0 {
-			panic(ndata)
-		} else {
-			decoded := []gopacket.LayerType{}
-			if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
-				for _, layer := range decoded {
-					if layer == layers.LayerTypeTCP {
-						// Read the sequence number from the packet
-						id := uint64(tcp.SrcPort)<<32 + uint64(tcp.Seq)
-						np, ok := this.tcpPinger.Get(id)
+		_, ndata, ts := readSocketErr(this.socket6, data, this.timestampType)
+		decoded := []gopacket.LayerType{}
+		if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
+			for _, layer := range decoded {
+				if layer == layers.LayerTypeTCP {
+					// Read the sequence number from the packet
+					id := uint64(tcp.SrcPort)<<32 + uint64(tcp.Seq)
+					np, ok := this.tcpPinger.Get(id)
 
-						if ok && tcp.DstPort == layers.TCPPort(np.probe.TCPPort) && tcp.SrcPort == layers.TCPPort(np.packet.SourcePort) && ip6.DstIP.Equal(np.probe.IPAddress) {
-							np.mutex.Lock()
-							if np.timestampSend == 0 {
-								np.timestampSend = ts
-							}
-							np.mutex.Unlock()
+					if ok && tcp.DstPort == layers.TCPPort(np.probe.TCPPort) && tcp.SrcPort == layers.TCPPort(np.packet.SourcePort) && ip6.DstIP.Equal(np.probe.IPAddress) {
+						np.mutex.Lock()
+						if np.timestampSend == 0 {
+							np.timestampSend = ts
 						}
+						np.mutex.Unlock()
 					}
 				}
-			} else {
-				fmt.Println("tcp er err ", err)
 			}
+		} else {
+			fmt.Println("tcp er err ", err)
 		}
 	}
 }

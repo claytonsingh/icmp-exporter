@@ -26,31 +26,30 @@ jobs:
     strategy:
       matrix:
         include:
-          - { goos: "linux", goarch: "amd64",   arch: "x64",     platform: "linux/amd64",   image: "ghcr.io/claytonsingh/ubuntu-golang:amd64" }
-          - { goos: "linux", goarch: "386",     arch: "x86",     platform: "linux/386",     image: "ghcr.io/claytonsingh/ubuntu-golang:i386" }
-          - { goos: "linux", goarch: "arm64",   arch: "arm64v8", platform: "linux/arm64",   image: "ghcr.io/claytonsingh/ubuntu-golang:arm64" }
-          - { goos: "linux", goarch: "arm",     arch: "arm32v7", platform: "linux/arm/v7",  image: "ghcr.io/claytonsingh/ubuntu-golang:armv7" }
-          - { goos: "linux", goarch: "arm",     arch: "arm32v6", platform: "linux/arm/v5",  image: "ghcr.io/claytonsingh/ubuntu-golang:armv5" }
-          - { goos: "linux", goarch: "riscv64", arch: "riscv64", platform: "linux/riscv64", image: "ghcr.io/claytonsingh/ubuntu-golang:riscv64" }
+          - { goos: "linux", goarch: "amd64",   arch: "x64",     goarm: "" }
+          - { goos: "linux", goarch: "386",     arch: "x86",     goarm: "" }
+          - { goos: "linux", goarch: "arm64",   arch: "arm64v8", goarm: "" }
+          - { goos: "linux", goarch: "arm",     arch: "arm32v7", goarm: "7" }
+          - { goos: "linux", goarch: "arm",     arch: "arm32v6", goarm: "6" }
+          - { goos: "linux", goarch: "riscv64", arch: "riscv64", goarm: "" }
     steps:
     - uses: actions/checkout@v4
     - name: Set Env
       run: |
         echo "PACKAGE_NAME=icmp-exporter-${{ matrix.goos }}-${{ matrix.arch }}" >> ${GITHUB_ENV}
         echo "VERSION_STRING=$(git show -s --format=%cs) ${GITHUB_REF_NAME} ${GITHUB_SHA}" >> ${GITHUB_ENV}
-    - uses: docker/setup-qemu-action@v3
     - name: Build Release
       run: |
         docker run --rm \
-        --platform=${{ matrix.platform }} \
-        -v $(pwd):/go/src -w /go/src \
+        -v "$(pwd):/workspace" -w /workspace \
         -e PACKAGE_NAME="${{ env.PACKAGE_NAME }}" \
         -e FLAGS="-X 'main.versionString=${{ env.VERSION_STRING }}'" \
-        -e CGO_ENABLED=1 \
+        -e CGO_ENABLED=0 \
         -e GOOS=${{ matrix.goos }} \
         -e GOARCH=${{ matrix.goarch }} \
+        -e GOARM="${{ matrix.goarm }}" \
         -e GOFLAGS="-buildvcs=false" \
-        ${{ matrix.image }} \
+        golang:1.27.4-bookworm \
         .github/build.sh
     - name: Upload Release
       run: gh release upload "${GITHUB_REF_NAME}" "${{ env.PACKAGE_NAME }}.tar.gz"
