@@ -344,16 +344,17 @@ func (this *TCPNative) Transmit(probe *PingProbe) {
 }
 
 func (this *TCPNative) receiveThread4() {
-	var ip4 layers.IPv4
-	var tcp4 layers.TCP
+	ip4 := layers.IPv4{Options: make([]layers.IPv4Option, 0, maxPacketOptions)}
+	tcp4 := layers.TCP{Options: make([]layers.TCPOption, 0, maxPacketOptions)}
 	parser4 := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ip4, &tcp4)
 	parser4.IgnoreUnsupported = true
 
 	data := make([]byte, syscall.Getpagesize())
+	decoded := make([]gopacket.LayerType, 0, 4)
 	for {
 		ip, ndata, ts := readSocket(this.socket4, data, this.timestampType)
-		if ip != nil {
-			decoded := []gopacket.LayerType{}
+		if ip.IsValid() {
+			decoded = decoded[:0]
 			if err := parser4.DecodeLayers(data[:ndata], &decoded); err == nil {
 				for _, layer := range decoded {
 					if layer == layers.LayerTypeTCP {
@@ -379,22 +380,23 @@ func (this *TCPNative) receiveThread4() {
 }
 
 func (this *TCPNative) receiveThread6() {
-	var tcp6 layers.TCP
+	tcp6 := layers.TCP{Options: make([]layers.TCPOption, 0, maxPacketOptions)}
 	parser6 := gopacket.NewDecodingLayerParser(layers.LayerTypeTCP, &tcp6)
 	parser6.IgnoreUnsupported = true
 
 	data := make([]byte, syscall.Getpagesize())
+	decoded := make([]gopacket.LayerType, 0, 4)
 	for {
 		ip, ndata, ts := readSocket(this.socket6, data, this.timestampType)
-		if ip != nil {
-			decoded := []gopacket.LayerType{}
+		if ip.IsValid() {
+			decoded = decoded[:0]
 			if err := parser6.DecodeLayers(data[:ndata], &decoded); err == nil {
 				for _, layer := range decoded {
 					if layer == layers.LayerTypeTCP {
 						id := uint64(tcp6.DstPort)<<32 + uint64(tcp6.Ack-1)
 						np, ok := this.tcpPinger.Get(id)
 
-						if ok && tcp6.ACK && tcp6.SYN && np.probe.IPAddress.Equal(ip) && tcp6.SrcPort == layers.TCPPort(np.probe.TCPPort) && tcp6.DstPort == layers.TCPPort(np.packet.SourcePort) {
+						if ok && tcp6.ACK && tcp6.SYN && np.probe.IPAddress.Equal(ip.AsSlice()) && tcp6.SrcPort == layers.TCPPort(np.probe.TCPPort) && tcp6.DstPort == layers.TCPPort(np.packet.SourcePort) {
 							np.mutex.Lock()
 							if np.timestampRecv == 0 {
 								np.timestampRecv = ts
@@ -412,16 +414,17 @@ func (this *TCPNative) receiveThread6() {
 
 func (this *TCPNative) errorThread4() {
 	var eth layers.Ethernet
-	var ip4 layers.IPv4
-	var tcp layers.TCP
+	ip4 := layers.IPv4{Options: make([]layers.IPv4Option, 0, maxPacketOptions)}
+	tcp := layers.TCP{Options: make([]layers.TCPOption, 0, maxPacketOptions)}
 
 	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4, &tcp)
 	parser.IgnoreUnsupported = true
 
 	data := make([]byte, syscall.Getpagesize())
+	decoded := make([]gopacket.LayerType, 0, 4)
 	for {
 		_, ndata, ts := readSocketErr(this.socket4, data, this.timestampType)
-		decoded := []gopacket.LayerType{}
+		decoded = decoded[:0]
 		if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
 			for _, layer := range decoded {
 				if layer == layers.LayerTypeTCP {
@@ -447,15 +450,16 @@ func (this *TCPNative) errorThread4() {
 func (this *TCPNative) errorThread6() {
 	var eth layers.Ethernet
 	var ip6 layers.IPv6
-	var tcp layers.TCP
+	tcp := layers.TCP{Options: make([]layers.TCPOption, 0, maxPacketOptions)}
 
 	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip6, &tcp)
 	parser.IgnoreUnsupported = true
 
 	data := make([]byte, syscall.Getpagesize())
+	decoded := make([]gopacket.LayerType, 0, 4)
 	for {
 		_, ndata, ts := readSocketErr(this.socket6, data, this.timestampType)
-		decoded := []gopacket.LayerType{}
+		decoded = decoded[:0]
 		if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
 			for _, layer := range decoded {
 				if layer == layers.LayerTypeTCP {

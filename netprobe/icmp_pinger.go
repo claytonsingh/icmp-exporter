@@ -17,8 +17,10 @@ import (
 )
 
 const (
-	payload = "\000\000\000\000\000\000\000\000....github.com/claytonsingh/icmp-exporter......."
-	//                                 ........................................................
+	// IPv4 and TCP headers allow at most 40 one-byte options.
+	maxPacketOptions = 40
+	payload          = "\000\000\000\000\000\000\000\000....github.com/claytonsingh/icmp-exporter......."
+	//                                          ........................................................
 )
 
 type nativePinger struct {
@@ -326,16 +328,17 @@ func (this *ICMPNative) Transmit(probe *PingProbe) {
 }
 
 func (this *ICMPNative) receiveIcmp4() {
-	var ip4 layers.IPv4
+	ip4 := layers.IPv4{Options: make([]layers.IPv4Option, 0, maxPacketOptions)}
 	var ic4 layers.ICMPv4
 	parser4 := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ip4, &ic4)
 	parser4.IgnoreUnsupported = true
 
 	data := make([]byte, syscall.Getpagesize())
+	decoded := make([]gopacket.LayerType, 0, 4)
 	for {
 		ip, ndata, ts := readSocket(this.socket4, data, this.timestampType)
-		if IsIPv4(ip) {
-			decoded := []gopacket.LayerType{}
+		if ip.Is4In6() {
+			decoded = decoded[:0]
 			if err := parser4.DecodeLayers(data[:ndata], &decoded); err == nil {
 				for _, layer := range decoded {
 					if layer == layers.LayerTypeICMPv4 {
@@ -367,10 +370,11 @@ func (this *ICMPNative) receiveIcmp6() {
 	parser6.IgnoreUnsupported = true
 
 	data := make([]byte, syscall.Getpagesize())
+	decoded := make([]gopacket.LayerType, 0, 4)
 	for {
 		ip, ndata, ts := readSocket(this.socket6, data, this.timestampType)
-		if IsIPv6(ip) {
-			decoded := []gopacket.LayerType{}
+		if ip.Is6() && !ip.Is4In6() {
+			decoded = decoded[:0]
 			if err := parser6.DecodeLayers(data[:ndata], &decoded); err == nil {
 				for _, layer := range decoded {
 					if layer == layers.LayerTypeICMPv6 {
@@ -380,7 +384,7 @@ func (this *ICMPNative) receiveIcmp6() {
 
 							np, ok := this.nativePinger.Get(id)
 
-							if ok && np.probe.IPAddress.Equal(ip) && ic6.TypeCode&0xFF00 == 0x8100 && Seq == np.packet.SequenceNumber {
+							if ok && np.probe.IPAddress.Equal(ip.AsSlice()) && ic6.TypeCode&0xFF00 == 0x8100 && Seq == np.packet.SequenceNumber {
 								np.mutex.Lock()
 								if np.timestampRecv == 0 {
 									np.timestampRecv = ts
@@ -399,16 +403,17 @@ func (this *ICMPNative) receiveIcmp6() {
 
 func (this *ICMPNative) errorIcmp4() {
 	var eth layers.Ethernet
-	var ip4 layers.IPv4
+	ip4 := layers.IPv4{Options: make([]layers.IPv4Option, 0, maxPacketOptions)}
 	var ic4 layers.ICMPv4
 
 	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4, &ic4)
 	parser.IgnoreUnsupported = true
 
 	data := make([]byte, syscall.Getpagesize())
+	decoded := make([]gopacket.LayerType, 0, 4)
 	for {
 		_, ndata, ts := readSocketErr(this.socket4, data, this.timestampType)
-		decoded := []gopacket.LayerType{}
+		decoded = decoded[:0]
 		if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
 			for _, layer := range decoded {
 				if layer == layers.LayerTypeICMPv4 {
@@ -441,9 +446,10 @@ func (this *ICMPNative) errorIcmp6() {
 	parser.IgnoreUnsupported = true
 
 	data := make([]byte, syscall.Getpagesize())
+	decoded := make([]gopacket.LayerType, 0, 4)
 	for {
 		_, ndata, ts := readSocketErr(this.socket6, data, this.timestampType)
-		decoded := []gopacket.LayerType{}
+		decoded = decoded[:0]
 		if err := parser.DecodeLayers(data[:ndata], &decoded); err == nil {
 			if slices.Contains(decoded, layers.LayerTypeICMPv6) {
 				id := ReadUInt64(ip6.Payload, 8)

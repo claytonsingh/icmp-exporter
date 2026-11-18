@@ -4,12 +4,13 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
-	"net"
+	"net/netip"
+	"unsafe"
 
 	syscall "golang.org/x/sys/unix"
 )
 
-func readSocket(sock int, data []byte, timestampType int) (ip net.IP, ndata int, ts int64) {
+func readSocket(sock int, data []byte, timestampType int) (ip netip.Addr, ndata int, ts int64) {
 	for {
 		var err error
 		ip, ndata, ts, err = recvpacket(sock, data, 0, timestampType)
@@ -18,13 +19,13 @@ func readSocket(sock int, data []byte, timestampType int) (ip net.IP, ndata int,
 		}
 		if err != nil {
 			panic(err)
-		} else if ip != nil {
+		} else if ip.IsValid() {
 			return ip, ndata, ts
 		}
 	}
 }
 
-func readSocketErr(sock int, data []byte, timestampType int) (ip net.IP, ndata int, ts int64) {
+func readSocketErr(sock int, data []byte, timestampType int) (ip netip.Addr, ndata int, ts int64) {
 	fds := []syscall.PollFd{{Fd: int32(sock), Events: syscall.POLLERR}}
 	for {
 		var err error
@@ -45,27 +46,58 @@ func readSocketErr(sock int, data []byte, timestampType int) (ip net.IP, ndata i
 	}
 }
 
-// recvpacket receives both normal packets and transmit timestamp notifications.
-// The error queue uses the same timestamp ancillary data as the receive queue.
-func recvpacket(fd int, data []byte, flags int, timestampType int) (net.IP, int, int64, error) {
-	var control [512]byte
-	n, oobn, recvflags, from, err := syscall.Recvmsg(fd, data, control[:], flags)
+// recvpacket receives normal packets or transmit timestamp notifications.
+// TX notifications skip source address collection. IPv4 sources are IPv6-mapped.
+// Returned addresses are independent values.
+func recvpacket(fd int, data []byte, flags int, timestampType int) (netip.Addr, int, int64, error) {
+	const controlSize = 512
+	var control [controlSize]byte
+	var source syscall.RawSockaddrAny
+	var iov syscall.Iovec
+	if len(data) > 0 {
+		iov.Base = &data[0]
+		iov.SetLen(len(data))
+	}
+	msg := syscall.Msghdr{
+		Iov:        &iov,
+		Iovlen:     1,
+		Control:    &control[0],
+		Controllen: controlSize,
+	}
+	if flags&syscall.MSG_ERRQUEUE == 0 {
+		msg.Name = (*byte)(unsafe.Pointer(&source))
+		msg.Namelen = uint32(syscall.SizeofSockaddrAny)
+	}
+	n, err := socketRecvmsg(fd, &msg, flags)
 	if err != nil {
-		return nil, 0, 0, err
+		return netip.Addr{}, 0, 0, err
 	}
-	if recvflags&(syscall.MSG_CTRUNC|syscall.MSG_TRUNC) != 0 {
-		return nil, 0, 0, fmt.Errorf("recvmsg: truncated packet or control data (flags %#x)", recvflags)
+	if msg.Flags&(syscall.MSG_CTRUNC|syscall.MSG_TRUNC) != 0 {
+		return netip.Addr{}, 0, 0, fmt.Errorf("recvmsg: truncated packet or control data (flags %#x)", msg.Flags)
 	}
-	ts, err := packetTimestamp(control[:oobn], timestampType)
+	if uint64(msg.Controllen) > uint64(len(control)) {
+		return netip.Addr{}, 0, 0, fmt.Errorf("recvmsg: invalid control length %d", msg.Controllen)
+	}
+	ts, err := packetTimestamp(control[:int(msg.Controllen)], timestampType)
 	if err != nil {
-		return nil, 0, 0, err
+		return netip.Addr{}, 0, 0, err
 	}
-	var address net.IP
-	switch from := from.(type) {
-	case *syscall.SockaddrInet4:
-		address = append(net.IP(nil), from.Addr[:]...)
-	case *syscall.SockaddrInet6:
-		address = append(net.IP(nil), from.Addr[:]...)
+	var address netip.Addr
+	if msg.Name != nil {
+		switch source.Addr.Family {
+		case syscall.AF_INET:
+			if msg.Namelen < syscall.SizeofSockaddrInet4 {
+				return netip.Addr{}, 0, 0, fmt.Errorf("recvmsg: short IPv4 address")
+			}
+			from := (*syscall.RawSockaddrInet4)(unsafe.Pointer(&source))
+			address = netip.AddrFrom16(netip.AddrFrom4(from.Addr).As16())
+		case syscall.AF_INET6:
+			if msg.Namelen < syscall.SizeofSockaddrInet6 {
+				return netip.Addr{}, 0, 0, fmt.Errorf("recvmsg: short IPv6 address")
+			}
+			from := (*syscall.RawSockaddrInet6)(unsafe.Pointer(&source))
+			address = netip.AddrFrom16(from.Addr)
+		}
 	}
 	return address, n, ts, nil
 }
@@ -74,16 +106,18 @@ func packetTimestamp(control []byte, timestampType int) (int64, error) {
 	if timestampType < 0 || timestampType > 2 {
 		return -1, fmt.Errorf("invalid timestamp slot %d", timestampType)
 	}
-	messages, err := syscall.ParseSocketControlMessage(control)
-	if err != nil {
-		return -1, fmt.Errorf("parse socket control messages: %w", err)
-	}
-	for _, message := range messages {
-		if message.Header.Level != syscall.SOL_SOCKET {
+	// Walk the received buffer directly instead of allocating a message slice.
+	for len(control) >= syscall.CmsgLen(0) {
+		header, data, remainder, err := syscall.ParseOneSocketControlMessage(control)
+		if err != nil {
+			return -1, fmt.Errorf("parse socket control messages: %w", err)
+		}
+		control = remainder
+		if header.Level != syscall.SOL_SOCKET {
 			continue
 		}
 		var wordSize int
-		switch message.Header.Type {
+		switch header.Type {
 		case syscall.SO_TIMESTAMPING_OLD:
 			wordSize = syscall.SizeofLong
 		case syscall.SO_TIMESTAMPING_NEW:
@@ -91,10 +125,10 @@ func packetTimestamp(control []byte, timestampType int) (int64, error) {
 		default:
 			continue
 		}
-		if len(message.Data) < 6*wordSize {
-			return -1, fmt.Errorf("short timestamp control message: got %d bytes, need %d", len(message.Data), 6*wordSize)
+		if len(data) < 6*wordSize {
+			return -1, fmt.Errorf("short timestamp control message: got %d bytes, need %d", len(data), 6*wordSize)
 		}
-		stamp := message.Data[timestampType*2*wordSize:]
+		stamp := data[timestampType*2*wordSize:]
 		var seconds, nanoseconds int64
 		if wordSize == 4 {
 			seconds = int64(int32(binary.NativeEndian.Uint32(stamp)))
