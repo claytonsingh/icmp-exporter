@@ -9,6 +9,12 @@ import (
 
 // RegisterPingerMetrics registers Prometheus metrics for the pinger using GaugeFunc
 func RegisterPingerMetrics(p *netprobe.Native) {
+	promauto.NewGauge(prometheus.GaugeOpts{
+		Name:        "icmp_exporter_build_info",
+		Help:        "Build information for the deployed ICMP exporter",
+		ConstLabels: prometheus.Labels{"version": versionString},
+	}).Set(1)
+
 	// ICMP packet counters
 	_ = promauto.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "icmp_packets_sent_total",
