@@ -193,7 +193,7 @@ Hardware Receive Filter Modes:
 # Building
 Assuming you have golang setup
 ```
-CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/icmp-exporter-amd64 ./cmd/icmp-exporter/
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/icmp-exporter-amd64 ./cmd/icmp-exporter/
 ```
 
 # Metrics
