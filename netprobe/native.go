@@ -111,6 +111,8 @@ func (this *Native) transmitThread() {
 		if interpacketDuration < this.minInterval {
 			interpacketDuration = this.minInterval
 		}
+		// Retain at most 50 packet intervals of scheduling backlog.
+		maxBacklog := 50 * interpacketDuration
 
 		this.ICMPNative.IncrementSequenceNumber()
 		this.TCPNative.IncrementSequenceNumber()
@@ -123,10 +125,8 @@ func (this *Native) transmitThread() {
 
 			if dt > 0 {
 				time.Sleep(dt)
-			} else if dt < time.Second {
-				this.nextPacket = now
-			} else if dt < time.Millisecond*-10 {
-				this.nextPacket = now.Add(time.Millisecond * -10)
+			} else if dt < -maxBacklog {
+				this.nextPacket = now.Add(-maxBacklog)
 			}
 
 			if probe.TCPPort == 0 {
