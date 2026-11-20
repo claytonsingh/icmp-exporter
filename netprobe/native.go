@@ -20,18 +20,23 @@ type Native struct {
 	probes           []*PingProbe
 	interval         time.Duration
 	minInterval      time.Duration
-	nextPacket       time.Time
+	rateLimiter      *Limiter
 	icmpActiveProbes atomic.Int64
 	tcpActiveProbes  atomic.Int64
 }
 
 func NewNative(hardware bool, iface4 string, iface6 string, timeout int, interval int, maxpps int, identifier int, minPort uint16, maxPort uint16, receiveBuffer int) *Native {
+	minInterval := time.Duration(float64(time.Second) / float64(maxpps))
+	rateLimiter, err := NewLimiter(minInterval, 50)
+	if err != nil {
+		panic(err)
+	}
 	return &Native{
 		ICMPNative:  NewICMPNative(hardware, iface4, iface6, timeout, uint16(identifier), receiveBuffer),
 		TCPNative:   NewTCPNative(hardware, iface4, iface6, timeout, uint16(identifier), minPort, maxPort, receiveBuffer),
 		interval:    time.Duration(interval) * time.Millisecond,
-		minInterval: time.Duration(float64(time.Second) / float64(maxpps)),
-		nextPacket:  time.Now(),
+		minInterval: minInterval,
+		rateLimiter: rateLimiter,
 	}
 }
 
@@ -111,23 +116,15 @@ func (this *Native) transmitThread() {
 		if interpacketDuration < this.minInterval {
 			interpacketDuration = this.minInterval
 		}
-		// Retain at most 50 packet intervals of scheduling backlog.
-		maxBacklog := 50 * interpacketDuration
+		if err := this.rateLimiter.SetInterval(interpacketDuration); err != nil {
+			panic(err)
+		}
 
 		this.ICMPNative.IncrementSequenceNumber()
 		this.TCPNative.IncrementSequenceNumber()
 
 		for _, probe := range probes {
-			this.nextPacket = this.nextPacket.Add(interpacketDuration)
-
-			now := time.Now()
-			dt := this.nextPacket.Sub(now)
-
-			if dt > 0 {
-				time.Sleep(dt)
-			} else if dt < -maxBacklog {
-				this.nextPacket = now.Add(-maxBacklog)
-			}
+			this.rateLimiter.Acquire()
 
 			if probe.TCPPort == 0 {
 				this.ICMPNative.Transmit(probe)
